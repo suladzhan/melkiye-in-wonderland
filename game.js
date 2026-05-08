@@ -48,12 +48,28 @@ const audio = {
     this.bg = document.getElementById('bg-music');
     this.gameover = document.getElementById('sfx-gameover');
     this.bg.loop = true;
+    this.bg.playsInline = true;
+    this.bg.setAttribute('playsinline', '');
     this.applyVolume();
   },
+  // Какие состояния хотят, чтобы фон звучал. Меняется снаружи (game/pause/visibility).
+  shouldPlayBg: false,
   applyVolume() {
-    const v = this.muted ? 0 : this.volume;
-    if (this.bg) this.bg.volume = v;
-    // SFX чуть громче музыки, но всё равно подчиняется mute
+    // На iOS Safari volume=0 НЕ останавливает воспроизведение —
+    // трек продолжает идти и удерживает аудио-сессию даже при сворачивании.
+    // Поэтому при mute делаем настоящий pause(), при unmute — play() (если игра идёт).
+    if (this.bg) {
+      if (this.muted) {
+        this.bg.volume = 0;
+        if (!this.bg.paused) this.bg.pause();
+      } else {
+        this.bg.volume = this.volume;
+        if (this.shouldPlayBg && this.bg.paused) {
+          const p = this.bg.play();
+          if (p && p.catch) p.catch(() => {});
+        }
+      }
+    }
     if (this.gameover) this.gameover.volume = this.muted ? 0 : Math.min(1, this.volume * 1.2);
   },
   setVolume(v) {
@@ -76,8 +92,27 @@ const audio = {
   // Запуск фонового трека (требует user gesture — вызывать с кнопки)
   startBg() {
     if (!this.bg) return;
+    this.shouldPlayBg = true;
+    if (this.muted) return;
     const p = this.bg.play();
     if (p && p.catch) p.catch(() => { /* браузер запретил — продолжим без музыки */ });
+  },
+  // Полная остановка фона (выход в меню / сворачивание Safari)
+  stopBg() {
+    this.shouldPlayBg = false;
+    if (this.bg && !this.bg.paused) this.bg.pause();
+  },
+  // Временно поставить на паузу, не сбрасывая «намерение играть»
+  pauseBg() {
+    if (this.bg && !this.bg.paused) this.bg.pause();
+  },
+  // Возобновить, если в принципе хотим, чтобы играло
+  resumeBg() {
+    if (!this.bg || !this.shouldPlayBg || this.muted) return;
+    if (this.bg.paused) {
+      const p = this.bg.play();
+      if (p && p.catch) p.catch(() => {});
+    }
   },
   // Приглушаем фон во время Game Over, восстанавливаем при рестарте
   duckBg() {
@@ -104,7 +139,7 @@ let speed = START_SPEED;
 let distance = 0;                      // пройденная дистанция (метры)
 let oranges = 0;
 let bestScore = parseInt(localStorage.getItem('mukashik_best') || '0', 10);
-let gameState = 'menu';                // 'menu' | 'playing' | 'gameover'
+let gameState = 'menu';                // 'menu' | 'playing' | 'paused' | 'gameover'
 
 const activeObstacles = [];            // {mesh, type, hitbox}
 const activeOranges = [];              // {mesh}
@@ -154,6 +189,8 @@ function init() {
   setupInput();
   setupUI();
   setupSettings();
+  setupPause();
+  setupVisibility();
 
   clock = new THREE.Clock();
   window.addEventListener('resize', onResize);
@@ -903,6 +940,75 @@ function setupUI() {
   document.getElementById('btn-restart').addEventListener('click', startGame);
 }
 
+// Панель паузы и кнопка-пауза
+function setupPause() {
+  const panel    = document.getElementById('pause-panel');
+  const btnPause = document.getElementById('btn-pause');
+  const btnResume  = document.getElementById('btn-resume');
+  const btnRestart = document.getElementById('btn-pause-restart');
+  const btnMenu    = document.getElementById('btn-pause-menu');
+
+  btnPause.addEventListener('click', () => {
+    if (gameState === 'playing') pauseGame();
+  });
+  btnResume.addEventListener('click', resumeGame);
+  btnRestart.addEventListener('click', () => {
+    document.getElementById('pause-panel').classList.add('hidden');
+    startGame();
+  });
+  btnMenu.addEventListener('click', () => {
+    document.getElementById('pause-panel').classList.add('hidden');
+    backToMenu();
+  });
+  // клик по фону — закрыть
+  panel.addEventListener('click', (e) => {
+    if (e.target === panel) resumeGame();
+  });
+}
+
+function pauseGame() {
+  if (gameState !== 'playing') return;
+  gameState = 'paused';
+  document.getElementById('pause-panel').classList.remove('hidden');
+  audio.pauseBg();
+}
+function resumeGame() {
+  if (gameState !== 'paused') return;
+  document.getElementById('pause-panel').classList.add('hidden');
+  gameState = 'playing';
+  // clock накопил dt пока стояли — сбрасываем, чтобы мир не «прыгнул»
+  if (clock) clock.getDelta();
+  audio.resumeBg();
+}
+function backToMenu() {
+  gameState = 'menu';
+  audio.stopBg();
+  document.getElementById('hud').classList.add('hidden');
+  document.getElementById('btn-pause').classList.add('hidden');
+  document.getElementById('gameover-screen').classList.add('hidden');
+  document.getElementById('start-screen').classList.remove('hidden');
+}
+
+// Глушим звук и ставим паузу при уходе из вкладки/Safari в фон.
+// На iOS Safari simple `volume=0` оставляет аудио живым в фоне — нужен реальный pause()
+// и связка событий visibilitychange + pagehide + window.blur.
+function setupVisibility() {
+  const onHide = () => {
+    audio.pauseBg();                // глушим музыку немедленно
+    if (gameState === 'playing') pauseGame(); // и ставим геймплей на паузу
+  };
+  const onShow = () => {
+    // НЕ авто-возобновляем игру — пользователь сам нажмёт «Продолжить».
+    // Музыку тоже не запускаем, пока юзер не вернулся к игре.
+  };
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) onHide(); else onShow();
+  });
+  // pagehide ловит свайп-вверх «домой» в iOS Safari, когда visibilitychange может не сработать
+  window.addEventListener('pagehide', onHide);
+  window.addEventListener('blur', onHide);
+}
+
 // Панель настроек — громкость и mute
 function setupSettings() {
   const panel = document.getElementById('settings-panel');
@@ -930,9 +1036,11 @@ function setupSettings() {
     valLabel.textContent = `${slider.value}%`;
     if (audio.muted && v > 0) muteCb.checked = false; // setVolume уже снял mute
   });
-  muteCb.addEventListener('change', () => {
-    audio.setMuted(muteCb.checked);
-  });
+  // На iOS Safari внутри <label> событие change иногда не приходит из-за конфликта
+  // touch/click — слушаем и change, и click, и синхронизируем состояние.
+  const onMuteToggle = () => audio.setMuted(muteCb.checked);
+  muteCb.addEventListener('change', onMuteToggle);
+  muteCb.addEventListener('click', onMuteToggle);
 }
 
 function setupInput() {
@@ -961,6 +1069,12 @@ function setupInput() {
 
   // Клавиатура (для отладки на десктопе)
   window.addEventListener('keydown', (e) => {
+    // Пауза работает и в игре, и в состоянии «paused» (как тумблер)
+    if (e.code === 'Escape' || e.code === 'KeyP') {
+      if (gameState === 'playing') pauseGame();
+      else if (gameState === 'paused') resumeGame();
+      return;
+    }
     if (gameState !== 'playing') return;
     switch (e.code) {
       case 'ArrowLeft': case 'KeyA': moveLane(-1); break;
@@ -1013,7 +1127,9 @@ function startGame() {
   // экраны
   document.getElementById('start-screen').classList.add('hidden');
   document.getElementById('gameover-screen').classList.add('hidden');
+  document.getElementById('pause-panel').classList.add('hidden');
   document.getElementById('hud').classList.remove('hidden');
+  document.getElementById('btn-pause').classList.remove('hidden');
   updateHUD();
 
   // Музыка: первый клик «Играть» одновременно — пользовательский жест,
@@ -1035,6 +1151,7 @@ function gameOver() {
   document.getElementById('best-score-end').textContent = bestScore;
   document.getElementById('best-score-start').textContent = bestScore;
   document.getElementById('hud').classList.add('hidden');
+  document.getElementById('btn-pause').classList.add('hidden');
   document.getElementById('gameover-screen').classList.remove('hidden');
 
   // Звук: фоновая музыка приглушается, отдельный SFX «Игра окончена»

@@ -28,6 +28,19 @@
   <!-- Шестерёнка-настройки (всегда видна) -->
   <button id="btn-settings" class="icon-btn" aria-label="Настройки">⚙</button>
 
+  <!-- Пауза (видна только во время игры) -->
+  <button id="btn-pause" class="icon-btn icon-btn-left hidden" aria-label="Пауза">⏸</button>
+
+  <!-- Модалка паузы -->
+  <div id="pause-panel" class="settings-overlay hidden">
+    <div class="settings-card">
+      <h3>Пауза</h3>
+      <button id="btn-resume" class="btn btn-sm">Продолжить</button>
+      <button id="btn-pause-restart" class="btn btn-sm btn-secondary">Заново</button>
+      <button id="btn-pause-menu" class="btn btn-sm btn-secondary">В меню</button>
+    </div>
+  </div>
+
   <!-- Модалка настроек -->
   <div id="settings-panel" class="settings-overlay hidden">
     <div class="settings-card">
