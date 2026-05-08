@@ -260,6 +260,7 @@ html, body {
 .icon-btn-left {
   right: auto;
   left: 14px;
+  top: calc(env(safe-area-inset-top, 14px) + 56px);
   font-size: 18px;
 }
 .icon-btn-left:active { transform: scale(0.92); }
