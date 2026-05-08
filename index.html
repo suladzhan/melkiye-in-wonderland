@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="theme-color" content="#ff8a3d" />
+  <title>Приключения Мухаммада в Дубае</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- Канвас Three.js -->
+  <canvas id="game-canvas"></canvas>
+
+  <!-- HUD во время игры -->
+  <div id="hud" class="hidden">
+    <div class="hud-row">
+      <span class="hud-pill">🍊 <span id="hud-oranges">0</span></span>
+      <span class="hud-pill">🏁 <span id="hud-distance">0</span> м</span>
+    </div>
+  </div>
+
+  <!-- Аудио -->
+  <audio id="bg-music" src="backgroundmusic.mp3" preload="auto" loop></audio>
+  <audio id="sfx-gameover" src="gameover.mp3" preload="auto"></audio>
+
+  <!-- Шестерёнка-настройки (всегда видна) -->
+  <button id="btn-settings" class="icon-btn" aria-label="Настройки">⚙</button>
+
+  <!-- Модалка настроек -->
+  <div id="settings-panel" class="settings-overlay hidden">
+    <div class="settings-card">
+      <h3>Настройки</h3>
+
+      <div class="setting-row">
+        <label for="vol-slider">Громкость музыки</label>
+        <div class="slider-wrap">
+          <input type="range" id="vol-slider" min="0" max="100" value="60" />
+          <span id="vol-value">60%</span>
+        </div>
+      </div>
+
+      <label class="setting-row toggle-row">
+        <input type="checkbox" id="mute-checkbox" />
+        <span>Выключить звук</span>
+      </label>
+
+      <button id="btn-close-settings" class="btn btn-sm">Готово</button>
+    </div>
+  </div>
+
+  <!-- Стартовый экран -->
+  <div id="start-screen" class="screen">
+    <div class="badge">🦫</div>
+    <h1>Приключения<br/>Мухаммада<br/>в Дубае</h1>
+    <p class="sub">Беги по пустыне, собирай 🍊</p>
+    <button id="btn-start" class="btn">Играть</button>
+    <p class="best">Лучший результат: <span id="best-score-start">0</span></p>
+    <p class="hint">Свайпы: ← → / ↑ прыжок / ↓ подкат<br/>Десктоп: стрелки или WASD</p>
+  </div>
+
+  <!-- Экран Game Over -->
+  <div id="gameover-screen" class="screen hidden">
+    <h2>Игра окончена</h2>
+    <p class="score-line">Очки: <span id="final-score">0</span></p>
+    <p class="score-line">Дистанция: <span id="final-distance">0</span> м</p>
+    <p class="best">Лучший результат: <span id="best-score-end">0</span></p>
+    <button id="btn-restart" class="btn">Заново</button>
+  </div>
+
+  <!-- Three.js + GLTFLoader через CDN, importmap чтобы работали относительные импорты -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+  <script type="module" src="game.js"></script>
+</body>
+</html>
