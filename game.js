@@ -1073,11 +1073,26 @@ function setupSettings() {
   valLabel.textContent = `${slider.value}%`;
   muteCb.checked = audio.muted;
 
-  btnOpen.addEventListener('click', () => panel.classList.remove('hidden'));
-  btnClose.addEventListener('click', () => panel.classList.add('hidden'));
+  // Открытие настроек во время игры — автопауза, иначе можно проиграть, пока крутишь громкость.
+  // Панель паузы при этом прячем: настройки заменяют её UI и сами вернут паузу при закрытии.
+  btnOpen.addEventListener('click', () => {
+    if (gameState === 'playing') {
+      pauseGame();
+      document.getElementById('pause-panel').classList.add('hidden');
+    }
+    panel.classList.remove('hidden');
+  });
+  const closeSettings = () => {
+    panel.classList.add('hidden');
+    // Если игра стоит на паузе — отдаём UI панели паузы, чтобы юзер сам нажал «Продолжить».
+    if (gameState === 'paused') {
+      document.getElementById('pause-panel').classList.remove('hidden');
+    }
+  };
+  btnClose.addEventListener('click', closeSettings);
   // Клик по фону — закрыть
   panel.addEventListener('click', (e) => {
-    if (e.target === panel) panel.classList.add('hidden');
+    if (e.target === panel) closeSettings();
   });
 
   slider.addEventListener('input', () => {
