@@ -1067,6 +1067,44 @@ function buildAklimaOnTable() {
   return root;
 }
 
+// Процедурная текстура вафельного узора для рожка Анисы — ромбовая сетка
+// с лёгким объёмом за счёт радиального градиента и тёмных точек на узлах.
+function makeWaffleTexture() {
+  const c = document.createElement('canvas');
+  c.width = 256; c.height = 256;
+  const g = c.getContext('2d');
+  // Базовый кремовый цвет вафли
+  g.fillStyle = '#d9a45c';
+  g.fillRect(0, 0, c.width, c.height);
+  // Лёгкий градиент для глубины
+  const grad = g.createRadialGradient(128, 128, 30, 128, 128, 200);
+  grad.addColorStop(0, 'rgba(255, 220, 170, 0.35)');
+  grad.addColorStop(1, 'rgba(110, 70, 30, 0.35)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, c.width, c.height);
+  // Сетка ромбов (две системы диагоналей)
+  g.strokeStyle = 'rgba(95, 60, 25, 0.85)';
+  g.lineWidth = 2.5;
+  const step = 32;
+  for (let i = -c.width; i < c.width * 2; i += step) {
+    g.beginPath(); g.moveTo(i, 0); g.lineTo(i + c.height, c.height); g.stroke();
+    g.beginPath(); g.moveTo(i, 0); g.lineTo(i - c.height, c.height); g.stroke();
+  }
+  // Тёмные точки на пересечениях
+  g.fillStyle = 'rgba(70, 40, 15, 0.7)';
+  for (let x = 0; x <= c.width; x += step) {
+    for (let y = 0; y <= c.height; y += step) {
+      g.beginPath(); g.arc(x, y, 1.6, 0, Math.PI * 2); g.fill();
+    }
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(6, 3);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  return tex;
+}
+
 // =============================================================
 // Игрок: Аниса — ГОРИЗОНТАЛЬНЫЙ рожок (как «летающая метла»)
 // Конус лежит вдоль Z: тип в +Z (хвост сзади), широкая сторона с шариком
@@ -1077,34 +1115,16 @@ function buildAnisaOnCone() {
   const root = new THREE.Group();
 
   // ---- Горизонтальный рожок ----
-  const wafMat = new THREE.MeshStandardMaterial({ color: 0xd9a45c, roughness: 0.85 });
+  // Вафельный узор делаем через процедурную текстуру — она ложится прямо
+  // на коническую поверхность по UV и естественно сужается к острию.
+  const wafMat = new THREE.MeshStandardMaterial({
+    map: makeWaffleTexture(),
+    roughness: 0.85,
+  });
   const cone = new THREE.Mesh(
-    new THREE.ConeGeometry(0.4, 1.1, 20, 1, true), wafMat);
+    new THREE.ConeGeometry(0.4, 1.1, 32, 8, true), wafMat);
   cone.rotation.x = Math.PI / 2;   // тип → +Z, база → -Z
-  cone.position.set(0, 0, 0);
   root.add(cone);
-
-  // Поперечные кольца вафли (радиус сужается от базы к острию)
-  for (let i = 0; i < 6; i++) {
-    const t = i / 5;
-    const z = -0.55 + t * 1.1;            // от -0.55 (база) до +0.55 (тип)
-    const r = 0.4 * (1 - t) + 0.018;      // радиус конуса в этой точке + offset
-    const ring = new THREE.Mesh(
-      new THREE.TorusGeometry(r, 0.018, 4, 22),
-      new THREE.MeshStandardMaterial({ color: 0xa67a3e, roughness: 0.9 }));
-    ring.position.z = z;                   // тор лежит в плоскости XY (ось — Z)
-    root.add(ring);
-  }
-  // Продольные «насечки» вафли (12 штук вокруг конуса) — для ромбовидного узора
-  const stripeMat = new THREE.MeshStandardMaterial({ color: 0xa67a3e, roughness: 0.9 });
-  for (let i = 0; i < 12; i++) {
-    const a = (i / 12) * Math.PI * 2;
-    const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.018, 1.05), stripeMat);
-    // Размещаем на средней «обёртке» (z=0, радиус ~ 0.21)
-    stripe.position.set(Math.cos(a) * 0.22, Math.sin(a) * 0.22, 0);
-    stripe.rotation.z = a;
-    root.add(stripe);
-  }
 
   // ---- Белый ванильный «твист» спереди (нос корабля) ----
   const creamMat = new THREE.MeshStandardMaterial({
@@ -1353,31 +1373,54 @@ function buildWatermelonSlice() {
 }
 
 function buildEskimo() {
-  // Шоколадное эскимо: коричневый кирпичик + палочка снизу
+  // Шоколадное эскимо в стиле «магнум»: вытянутый закруглённый эллипсоид
+  // тёмного шоколада + деревянная палочка снизу + блики и подтёки глазури.
   const esk = new THREE.Group();
-  const body = new THREE.Mesh(
-    new THREE.BoxGeometry(0.34, 0.5, 0.16),
-    new THREE.MeshStandardMaterial({ color: 0x5a2a14, roughness: 0.6,
-      emissive: 0x2a1208, emissiveIntensity: 0.2 }));
+  const choco = new THREE.MeshStandardMaterial({
+    color: 0x4a230f, roughness: 0.45,
+    emissive: 0x2a1208, emissiveIntensity: 0.15,
+  });
+  const chocoLight = new THREE.MeshStandardMaterial({
+    color: 0x6e3a1c, roughness: 0.35,
+  });
+
+  // Тело — эллипсоид (вытянутая по Y сфера, плоская по Z)
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.20, 24, 18), choco);
+  body.scale.set(0.92, 1.55, 0.5);
   esk.add(body);
-  // Скруглённый верх (полусфера)
-  const top = new THREE.Mesh(
-    new THREE.SphereGeometry(0.17, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2),
-    new THREE.MeshStandardMaterial({ color: 0x5a2a14, roughness: 0.6 }));
-  top.scale.set(1.0, 1.0, 0.95); top.position.y = 0.25;
-  esk.add(top);
-  // «Откушенный» кусочек (светлый кружок) — для уюта рисунка
-  const bite = new THREE.Mesh(
-    new THREE.SphereGeometry(0.08, 8, 6),
-    new THREE.MeshStandardMaterial({ color: 0xfff5e0, roughness: 0.7 }));
-  bite.position.set(0.13, 0.16, 0.09);
-  esk.add(bite);
-  // Палочка
+
+  // Глянцевый блик слева — тонкая вертикальная светлая «капля»
+  const shine = new THREE.Mesh(
+    new THREE.SphereGeometry(0.04, 14, 10), chocoLight);
+  shine.scale.set(0.35, 4.5, 0.14);
+  shine.position.set(-0.07, 0.05, 0.085);
+  esk.add(shine);
+
+  // Подтёки шоколада на нижнем крае (для текстурности)
+  for (let i = 0; i < 4; i++) {
+    const drip = new THREE.Mesh(
+      new THREE.SphereGeometry(0.025, 10, 8), choco);
+    drip.scale.set(1.2, 1.6, 0.6);
+    const x = -0.1 + i * 0.07;
+    drip.position.set(x, -0.27 + Math.random() * 0.04, 0.07);
+    esk.add(drip);
+  }
+
+  // Деревянная палочка
+  const stickMat = new THREE.MeshStandardMaterial({
+    color: 0xd9b58a, roughness: 0.95,
+  });
   const stick = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.025, 0.025, 0.22, 8),
-    new THREE.MeshStandardMaterial({ color: 0xd9b58a, roughness: 0.95 }));
-  stick.position.y = -0.36;
+    new THREE.CylinderGeometry(0.026, 0.022, 0.22, 10), stickMat);
+  stick.position.y = -0.42;
   esk.add(stick);
+  // Закруглённый кончик палочки
+  const stickTip = new THREE.Mesh(
+    new THREE.SphereGeometry(0.026, 10, 8), stickMat);
+  stickTip.scale.set(1, 0.55, 1);
+  stickTip.position.y = -0.535;
+  esk.add(stickTip);
+
   return esk;
 }
 
@@ -1440,19 +1483,21 @@ function buildCar() {
 // Препятствия конфетного мира: шоколадный пик, конфетный шлагбаум, тортик
 // =============================================================
 function buildChocolateSpike() {
-  // Тёмный шоколадный конус с глянцем
+  // Красный «леденцовый» пик с глянцем (по запросу пользователя — красный, не шоколадный).
   const sp = new THREE.Group();
   const body = new THREE.Mesh(
     new THREE.ConeGeometry(0.45, 1.0, 16),
-    new THREE.MeshStandardMaterial({ color: 0x4a2412, roughness: 0.35, metalness: 0.05,
-      emissive: 0x1a0a04, emissiveIntensity: 0.15 }));
+    new THREE.MeshStandardMaterial({
+      color: 0xd9202e, roughness: 0.3, metalness: 0.05,
+      emissive: 0x4a0810, emissiveIntensity: 0.2,
+    }));
   body.position.y = 0.5; sp.add(body);
-  // Подтаявшая капля сверху (полированная сфера для блика)
+  // Светлый блик на верхней капле для глянцевости
   const drop = new THREE.Mesh(
-    new THREE.SphereGeometry(0.12, 10, 8),
-    new THREE.MeshStandardMaterial({ color: 0x6e3a1c, roughness: 0.25 }));
+    new THREE.SphereGeometry(0.12, 12, 10),
+    new THREE.MeshStandardMaterial({ color: 0xff5a5a, roughness: 0.2 }));
   drop.position.y = 1.05; sp.add(drop);
-  // Подставка-блюдце (золотисто-кремовая)
+  // Подставка-блюдце (золотисто-кремовая, остаётся как контраст)
   const baseSq = new THREE.Mesh(
     new THREE.CylinderGeometry(0.5, 0.55, 0.08, 16),
     new THREE.MeshStandardMaterial({ color: 0xffd58a, roughness: 0.6 }));
