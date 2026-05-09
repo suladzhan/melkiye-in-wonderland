@@ -6,7 +6,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="theme-color" content="#ff8a3d" />
-  <title>Приключения Мухаммада в Дубае</title>
+  <title>Мелкие в мире чудес</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -16,14 +16,14 @@
   <!-- HUD во время игры -->
   <div id="hud" class="hidden">
     <div class="hud-row">
-      <span class="hud-pill">🍊 <span id="hud-oranges">0</span></span>
+      <span class="hud-pill"><span id="hud-collect-icon">🍊</span> <span id="hud-oranges">0</span></span>
       <span class="hud-pill">🏁 <span id="hud-distance">0</span> м</span>
     </div>
   </div>
 
-  <!-- Аудио (звуки Мухаммеда; будущие скины добавят свои в Characters/<Имя>/) -->
-  <audio id="bg-music" src="Characters/Мухаммад/muhammad_main_sound.mp3" preload="auto" loop></audio>
-  <audio id="sfx-gameover" src="Characters/Мухаммад/muhammad_gameover_sound.mp3" preload="auto"></audio>
+  <!-- Аудио (src проставляется из JS под выбранного персонажа) -->
+  <audio id="bg-music" preload="auto" loop></audio>
+  <audio id="sfx-gameover" preload="auto"></audio>
 
   <!-- Шестерёнка-настройки (всегда видна) -->
   <button id="btn-settings" class="icon-btn" aria-label="Настройки">⚙</button>
@@ -65,12 +65,20 @@
 
   <!-- Стартовый экран -->
   <div id="start-screen" class="screen">
-    <div class="badge">🦫</div>
-    <h1>Приключения<br/>Мухаммада<br/>в Дубае</h1>
-    <p class="sub">Беги по пустыне, собирай 🍊</p>
+    <div class="badge">✨</div>
+    <h1>Мелкие<br/>в мире<br/>чудес</h1>
+    <p class="sub">Выбери героя и беги навстречу приключениям</p>
     <button id="btn-start" class="btn">Играть</button>
     <p class="best">Лучший результат: <span id="best-score-start">0</span></p>
     <p class="hint">Свайпы: ← → / ↑ прыжок / ↓ подкат<br/>Десктоп: стрелки или WASD</p>
+    <p class="credit">Игра создана 9 мая 2026 года<br/>Джанхуватовым Сулейманом</p>
+  </div>
+
+  <!-- Экран выбора персонажа -->
+  <div id="character-screen" class="screen hidden">
+    <h2>Выбери героя</h2>
+    <div class="character-grid" id="character-grid"><!-- наполняется из JS --></div>
+    <button id="btn-character-back" class="btn btn-sm btn-secondary back-btn">← Назад</button>
   </div>
 
   <!-- Экран Game Over -->
@@ -80,6 +88,7 @@
     <p class="score-line">Дистанция: <span id="final-distance">0</span> м</p>
     <p class="best">Лучший результат: <span id="best-score-end">0</span></p>
     <button id="btn-restart" class="btn">Заново</button>
+    <button id="btn-go-menu" class="btn btn-sm btn-secondary back-btn">В меню</button>
   </div>
 
   <!-- Three.js + GLTFLoader через CDN, importmap чтобы работали относительные импорты -->
