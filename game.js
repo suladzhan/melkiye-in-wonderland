@@ -76,8 +76,15 @@ const audio = {
       this.bg.src = bgSrc;
       this.bg.load();
     }
-    if (this.gameover.getAttribute('src') !== gameoverSrc) {
-      this.gameover.src = gameoverSrc;
+    // gameoverSrc может быть null/undefined — у героя нет звука поражения
+    if (gameoverSrc) {
+      if (this.gameover.getAttribute('src') !== gameoverSrc) {
+        this.gameover.src = gameoverSrc;
+        this.gameover.load();
+      }
+    } else {
+      // Очищаем src, чтобы playGameover ничего не воспроизводил
+      this.gameover.removeAttribute('src');
       this.gameover.load();
     }
     this.applyVolume();
@@ -110,6 +117,7 @@ const audio = {
   unduckBg() { this.applyVolume(); },
   playGameover() {
     if (!this.gameover) return;
+    if (!this.gameover.getAttribute('src')) return; // у героя нет звука поражения
     this.gameover.currentTime = 0;
     const p = this.gameover.play();
     if (p && p.catch) p.catch(() => {});
@@ -117,12 +125,11 @@ const audio = {
 };
 
 // ---------- Конфиг персонажей ----------
-// Звук Game Over для Аклимы/Анисы — пока используем звук Мухаммеда как fallback,
-// до тех пор пока в Characters/<имя>/ не появится <id>_gameover_sound.mp3.
+// Звук Game Over только у Мухаммеда; у остальных героев его нет —
+// проигрывание тихо пропускается в audio.playGameover.
 const CHARACTERS = {
   muhammad: {
-    id: 'muhammad', name: 'Мухаммад', emoji: '🦫',
-    desc: 'Капибара по Дубаю',
+    id: 'muhammad', name: 'Мухаммад',
     locked: false, bestKey: 'best_muhammad', theme: 'dubai',
     audio: {
       bg: 'Characters/Мухаммад/muhammad_main_sound.mp3',
@@ -131,30 +138,25 @@ const CHARACTERS = {
     collect: { icon: '🍊' },
   },
   aklima: {
-    id: 'aklima', name: 'Аклима', emoji: '🍰',
-    desc: 'Стол-летун, арбузы',
+    id: 'aklima', name: 'Аклима',
     locked: false, bestKey: 'best_aklima', theme: 'candy', vehicle: 'table',
     audio: {
       bg: 'Characters/Аклима/aklima_main_sound.mp3',
-      gameover: 'Characters/Мухаммад/muhammad_gameover_sound.mp3',
     },
     collect: { icon: '🍉' },
   },
   anisa: {
-    id: 'anisa', name: 'Аниса', emoji: '🍦',
-    desc: 'Рожок и эскимо',
+    id: 'anisa', name: 'Аниса',
     locked: false, bestKey: 'best_anisa', theme: 'candy', vehicle: 'cone',
     audio: {
       bg: 'Characters/Аниса/anisa_main_sound.mp3',
-      gameover: 'Characters/Мухаммад/muhammad_gameover_sound.mp3',
     },
     collect: { icon: '🍫' },
   },
-  abdulla: { id: 'abdulla', name: 'Абдулла', emoji: '👦', locked: true, desc: '' },
-  arslan:  { id: 'arslan',  name: 'Арслан',  emoji: '🧒', locked: true, desc: '' },
-  osman:   { id: 'osman',   name: 'Осман',   emoji: '🧔', locked: true, desc: '' },
+  arslan_abdulla: { id: 'arslan_abdulla', name: 'Арслан и Абдулла', locked: true },
+  osman:          { id: 'osman',          name: 'Осман',           locked: true },
 };
-const CHARACTER_ORDER = ['muhammad', 'aklima', 'anisa', 'abdulla', 'arslan', 'osman'];
+const CHARACTER_ORDER = ['muhammad', 'aklima', 'anisa', 'arslan_abdulla', 'osman'];
 
 // ---------- Глобальное состояние ----------
 let scene, camera, renderer, clock;
@@ -868,291 +870,406 @@ function buildCapybaraWithKid() {
 }
 
 // =============================================================
-// Игрок: Аклима (девочка на летающем круглом столе)
-// Стол — низкий розовый цилиндр с белыми вертикальными полосами (как в фото).
-// Девочка в розовом платье, тёмные волосы, сидит сверху.
+// Игрок: Аклима — летающий диск (без ножек) + девочка СИДИТ сверху
+// со свешенными вперёд ногами. Габариты компактные: голова ≈ y 1.05,
+// чтобы при подкате гарантированно проходить под шлагбаумом.
 // =============================================================
 function buildAklimaOnTable() {
   const root = new THREE.Group();
 
-  // ---- Стол-летун ----
-  const table = new THREE.Group();
-  // Столешница (плоский диск)
+  // ---- Летающий диск (никаких ножек/колёс — только сам диск) ----
+  const disc = new THREE.Group();
+
+  // Тело диска — толстый цилиндр с радиусом 0.78
   const top = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.95, 0.95, 0.18, 28),
-    new THREE.MeshStandardMaterial({ color: 0xffb5c8, roughness: 0.55 }));
-  top.position.y = 0.6; table.add(top);
-  // Верх столешницы — окантовка-«крем»
+    new THREE.CylinderGeometry(0.78, 0.78, 0.13, 32),
+    new THREE.MeshStandardMaterial({ color: 0xffb5c8, roughness: 0.5 }));
+  top.position.y = 0.065; disc.add(top);
+
+  // Верхняя крем-окантовка (тор)
   const rim = new THREE.Mesh(
-    new THREE.TorusGeometry(0.95, 0.07, 8, 32),
-    new THREE.MeshStandardMaterial({ color: 0xfff0f4, roughness: 0.5 }));
-  rim.position.y = 0.69; rim.rotation.x = Math.PI / 2; table.add(rim);
-  // Ножка с розово-белыми полосами (как сахарная палочка)
-  const leg = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.18, 0.22, 0.5, 18),
-    new THREE.MeshStandardMaterial({ color: 0xffb5c8, roughness: 0.55 }));
-  leg.position.y = 0.25; table.add(leg);
-  for (let i = 0; i < 4; i++) {
-    const stripe = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.2, 0.215, 0.06, 18),
-      new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 }));
-    stripe.position.y = 0.07 + i * 0.13; table.add(stripe);
+    new THREE.TorusGeometry(0.78, 0.05, 10, 36),
+    new THREE.MeshStandardMaterial({ color: 0xfff5fa, roughness: 0.45 }));
+  rim.position.y = 0.135; rim.rotation.x = Math.PI / 2; disc.add(rim);
+
+  // Розово-белые радиальные сектора на верхней грани (как карамель/конфетные дольки)
+  const sliceCount = 12;
+  for (let i = 0; i < sliceCount; i++) {
+    if (i % 2) continue; // через одну — оставляем основной розовый
+    const wedge = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.78, 0.78, 0.005, 18, 1, false,
+        (i / sliceCount) * Math.PI * 2, (Math.PI * 2) / sliceCount),
+      new THREE.MeshStandardMaterial({ color: 0xfff0f4, roughness: 0.5 }));
+    wedge.position.y = 0.131; disc.add(wedge);
   }
-  // Подставка-блюдце
-  const base = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.32, 0.4, 0.08, 18),
-    new THREE.MeshStandardMaterial({ color: 0xfff0f4, roughness: 0.6 }));
-  base.position.y = 0.04; table.add(base);
-  // Кружевной край (как в фото) — тор-полукольцо
+
+  // Нижняя кружевная юбочка диска (видна снизу-сбоку при наклоне)
   const lace = new THREE.Mesh(
-    new THREE.TorusGeometry(0.98, 0.05, 6, 24),
-    new THREE.MeshStandardMaterial({ color: 0xfff5fa, roughness: 0.7 }));
-  lace.position.y = 0.55; lace.rotation.x = Math.PI / 2; table.add(lace);
-  root.add(table);
-
-  // ---- Девочка ----
-  const girl = new THREE.Group();
-  const skinMat  = new THREE.MeshStandardMaterial({ color: 0xf2c79b, roughness: 0.85 });
-  const dressMat = new THREE.MeshStandardMaterial({ color: 0xffaecb, roughness: 0.65 });
-  const dressAcc = new THREE.MeshStandardMaterial({ color: 0xfff0f4, roughness: 0.55 });
-  const hairMat  = new THREE.MeshStandardMaterial({ color: 0x2a1810, roughness: 0.95 });
-  const shoeMat  = new THREE.MeshStandardMaterial({ color: 0xffe6c0, roughness: 0.7 });
-
-  // Юбка — конус, расширяется книзу (как пышное платье)
-  const skirt = new THREE.Mesh(new THREE.ConeGeometry(0.42, 0.5, 16), dressMat);
-  skirt.position.set(0, 1.0, 0.05); girl.add(skirt);
-  // Лиф — сфера сверху юбки
-  const bodice = new THREE.Mesh(new THREE.SphereGeometry(0.24, 14, 10), dressMat);
-  bodice.scale.set(1.0, 1.0, 0.85); bodice.position.set(0, 1.32, 0.05); girl.add(bodice);
-  // Воротничок-кружево
-  const collar = new THREE.Mesh(new THREE.TorusGeometry(0.18, 0.04, 6, 18), dressAcc);
-  collar.position.set(0, 1.5, 0.05); collar.rotation.x = Math.PI / 2; girl.add(collar);
-  // Шея + голова
-  const neckG = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.08, 0.1, 10), skinMat);
-  neckG.position.set(0, 1.55, 0.05); girl.add(neckG);
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.26, 18, 14), skinMat);
-  head.scale.set(1.0, 1.05, 1.0); head.position.set(0, 1.78, 0.05); girl.add(head);
-
-  // Тёмные волосы — масса сверху + боковые длинные пряди
-  const hairTop = new THREE.Mesh(new THREE.SphereGeometry(0.28, 16, 12), hairMat);
-  hairTop.scale.set(1.05, 0.75, 1.05); hairTop.position.set(0, 1.88, 0.02); girl.add(hairTop);
-  for (const sx of [-1, 1]) {
-    const lock = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.07, 0.42, 8), hairMat);
-    lock.position.set(sx * 0.22, 1.6, 0.05); lock.rotation.z = sx * 0.15;
-    girl.add(lock);
+    new THREE.CylinderGeometry(0.85, 0.78, 0.08, 32),
+    new THREE.MeshStandardMaterial({ color: 0xfff5fa, roughness: 0.6 }));
+  lace.position.y = -0.005; disc.add(lace);
+  // Зубчатые «капельки» по нижнему краю — кружево
+  for (let i = 0; i < 24; i++) {
+    const a = (i / 24) * Math.PI * 2;
+    const drop = new THREE.Mesh(
+      new THREE.SphereGeometry(0.045, 8, 6),
+      new THREE.MeshStandardMaterial({ color: 0xfff5fa, roughness: 0.6 }));
+    drop.position.set(Math.cos(a) * 0.85, -0.045, Math.sin(a) * 0.85);
+    disc.add(drop);
   }
 
-  // Глаза-точки + улыбка
+  // Звёздочки-«пыльца» на верхней грани — намёк на волшебный полёт
+  for (let i = 0; i < 5; i++) {
+    const sp = new THREE.Mesh(
+      new THREE.SphereGeometry(0.02, 6, 5),
+      new THREE.MeshStandardMaterial({
+        color: 0xffe6f0, emissive: 0xffaad0, emissiveIntensity: 0.5 }));
+    const a = Math.random() * Math.PI * 2;
+    const r = 0.3 + Math.random() * 0.4;
+    sp.position.set(Math.cos(a) * r, 0.135, Math.sin(a) * r);
+    disc.add(sp);
+  }
+  root.add(disc);
+
+  // ---- Девочка (компактная, явно сидит) ----
+  const girl = new THREE.Group();
+  const skinMat   = new THREE.MeshStandardMaterial({ color: 0xf2c79b, roughness: 0.85 });
+  const dressMat  = new THREE.MeshStandardMaterial({ color: 0xffaecb, roughness: 0.65 });
+  const dressAcc  = new THREE.MeshStandardMaterial({ color: 0xfff5fa, roughness: 0.55 });
+  const hairMat   = new THREE.MeshStandardMaterial({ color: 0x2a1810, roughness: 0.95 });
+  const shoeMat   = new THREE.MeshStandardMaterial({ color: 0xfff5fa, roughness: 0.6 });
+  const lipMat    = new THREE.MeshStandardMaterial({ color: 0xc24a78, roughness: 0.5 });
+  const cheekMat  = new THREE.MeshStandardMaterial({
+    color: 0xff9bb9, transparent: true, opacity: 0.55, roughness: 0.6 });
+
+  // База: бёдра/попа на диске — расплющенная сфера (поза «сидя»)
+  const hips = new THREE.Mesh(new THREE.SphereGeometry(0.22, 14, 10), dressMat);
+  hips.scale.set(1.1, 0.7, 1.0); hips.position.set(0, 0.27, 0.1);
+  girl.add(hips);
+
+  // Юбка-«колокольчик», подол лежит на диске
+  const skirt = new THREE.Mesh(new THREE.ConeGeometry(0.36, 0.32, 16), dressMat);
+  skirt.position.set(0, 0.34, 0.1); girl.add(skirt);
+  // Кружевной подол — тонкий тор у нижней кромки
+  const skirtHem = new THREE.Mesh(
+    new THREE.TorusGeometry(0.34, 0.025, 6, 22), dressAcc);
+  skirtHem.position.set(0, 0.21, 0.1); skirtHem.rotation.x = Math.PI / 2;
+  girl.add(skirtHem);
+
+  // Лиф
+  const bodice = new THREE.Mesh(new THREE.SphereGeometry(0.18, 14, 10), dressMat);
+  bodice.scale.set(1.0, 0.95, 0.85); bodice.position.set(0, 0.55, 0.05);
+  girl.add(bodice);
+
+  // Кружевной воротничок
+  const collar = new THREE.Mesh(new THREE.TorusGeometry(0.13, 0.025, 6, 18), dressAcc);
+  collar.position.set(0, 0.7, 0.05); collar.rotation.x = Math.PI / 2;
+  girl.add(collar);
+
+  // Шея + голова
+  const neckG = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.065, 0.08, 10), skinMat);
+  neckG.position.set(0, 0.74, 0.05); girl.add(neckG);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.21, 18, 14), skinMat);
+  head.scale.set(1.0, 1.05, 1.0); head.position.set(0, 0.92, 0.05); girl.add(head);
+
+  // Тёмные волосы: основная шапка + чёлка + длинные пряди по бокам/сзади
+  const hairTop = new THREE.Mesh(new THREE.SphereGeometry(0.225, 16, 12), hairMat);
+  hairTop.scale.set(1.05, 0.78, 1.05); hairTop.position.set(0, 1.0, 0.03);
+  girl.add(hairTop);
+  // Чёлка
+  const bangs = new THREE.Mesh(new THREE.SphereGeometry(0.13, 12, 10), hairMat);
+  bangs.scale.set(1.6, 0.4, 0.55); bangs.position.set(0, 0.93, -0.13);
+  girl.add(bangs);
+  // Пряди-локоны до плеч
   for (const sx of [-1, 1]) {
-    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.025, 8, 6),
+    const lock = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.04, 0.32, 8), hairMat);
+    lock.position.set(sx * 0.18, 0.78, 0.07); lock.rotation.z = sx * 0.18;
+    girl.add(lock);
+    const lockTip = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 6), hairMat);
+    lockTip.position.set(sx * 0.21, 0.62, 0.07); girl.add(lockTip);
+  }
+  // Задняя «копна» — длинные волосы за спиной
+  const back = new THREE.Mesh(new THREE.SphereGeometry(0.22, 14, 10), hairMat);
+  back.scale.set(0.85, 1.2, 0.45); back.position.set(0, 0.78, 0.22);
+  girl.add(back);
+
+  // Лицо: глаза + ресницы + румянец + улыбка
+  for (const sx of [-1, 1]) {
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.022, 8, 6),
       new THREE.MeshStandardMaterial({ color: 0x1a0e08 }));
-    eye.position.set(sx * 0.075, 1.78, -0.21); girl.add(eye);
+    eye.position.set(sx * 0.065, 0.92, -0.18); girl.add(eye);
+    // Лёгкая «ресничка»-полоска под глазом
+    const lash = new THREE.Mesh(
+      new THREE.BoxGeometry(0.04, 0.005, 0.005),
+      new THREE.MeshStandardMaterial({ color: 0x1a0e08 }));
+    lash.position.set(sx * 0.065, 0.94, -0.19); girl.add(lash);
+    // Румянец
+    const cheek = new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 6), cheekMat);
+    cheek.scale.set(1, 0.6, 0.4);
+    cheek.position.set(sx * 0.11, 0.88, -0.18); girl.add(cheek);
   }
   const smile = new THREE.Mesh(
-    new THREE.TorusGeometry(0.05, 0.011, 6, 10, Math.PI),
-    new THREE.MeshStandardMaterial({ color: 0xc24a78 }));
-  smile.rotation.x = Math.PI; smile.position.set(0, 1.69, -0.22); girl.add(smile);
+    new THREE.TorusGeometry(0.04, 0.009, 6, 12, Math.PI), lipMat);
+  smile.rotation.x = Math.PI; smile.position.set(0, 0.85, -0.19);
+  girl.add(smile);
 
   // Руки — лежат на коленях
   for (const sx of [-1, 1]) {
-    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.05, 0.32, 8), dressMat);
-    arm.position.set(sx * 0.25, 1.32, 0.0);
-    arm.rotation.z = sx * 0.4; arm.rotation.x = -0.3;
-    girl.add(arm);
-    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 6), skinMat);
-    hand.position.set(sx * 0.18, 1.13, -0.05); girl.add(hand);
+    const upperArm = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.05, 0.045, 0.25, 10), dressMat);
+    upperArm.position.set(sx * 0.2, 0.55, 0.0);
+    upperArm.rotation.z = sx * 0.4; upperArm.rotation.x = -0.55;
+    girl.add(upperArm);
+    // Манжет
+    const cuff = new THREE.Mesh(new THREE.TorusGeometry(0.055, 0.018, 4, 12), dressAcc);
+    cuff.position.set(sx * 0.27, 0.42, -0.1);
+    cuff.rotation.z = sx * 0.4; cuff.rotation.y = Math.PI / 2;
+    girl.add(cuff);
+    // Кисти на коленях
+    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 6), skinMat);
+    hand.position.set(sx * 0.18, 0.32, -0.15); girl.add(hand);
   }
-  // Ножки свисают со столешницы
-  for (const sx of [-1, 1]) {
-    const leg2 = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.055, 0.4, 10), skinMat);
-    leg2.position.set(sx * 0.16, 0.78, 0.18); leg2.rotation.x = 0.15;
-    girl.add(leg2);
-    const sock = new THREE.Mesh(new THREE.CylinderGeometry(0.062, 0.062, 0.12, 10), shoeMat);
-    sock.position.set(sx * 0.18, 0.6, 0.22); girl.add(sock);
-    const shoe = new THREE.Mesh(new THREE.SphereGeometry(0.075, 8, 6),
-      new THREE.MeshStandardMaterial({ color: 0xfff5fa, roughness: 0.6 }));
-    shoe.scale.set(1, 0.6, 1.2); shoe.position.set(sx * 0.18, 0.5, 0.27);
-    girl.add(shoe);
-  }
-  root.add(girl);
 
-  // Метаданные для левитации
+  // Ноги — свисают вперёд (явная «сидящая» поза)
+  // Бедро: от попы (z=0.1, y=0.27) идёт вперёд-вниз. Колено впереди и ниже.
+  for (const sx of [-1, 1]) {
+    // Бедро
+    const thigh = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.07, 0.06, 0.32, 10), dressMat);
+    thigh.position.set(sx * 0.11, 0.24, -0.05);
+    thigh.rotation.x = Math.PI / 2 - 0.25; // лежит почти горизонтально
+    girl.add(thigh);
+    // Колено
+    const knee = new THREE.Mesh(new THREE.SphereGeometry(0.065, 10, 8), skinMat);
+    knee.position.set(sx * 0.11, 0.2, -0.22); girl.add(knee);
+    // Голень — свисает вниз с переднего края диска
+    const shin = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.055, 0.05, 0.36, 10), skinMat);
+    shin.position.set(sx * 0.11, 0.02, -0.28);
+    shin.rotation.x = -0.15;
+    girl.add(shin);
+    // Ботиночек
+    const shoe = new THREE.Mesh(new THREE.SphereGeometry(0.075, 10, 8), shoeMat);
+    shoe.scale.set(1, 0.55, 1.4);
+    shoe.position.set(sx * 0.11, -0.16, -0.32); girl.add(shoe);
+    // Розовый ремешок-носочек
+    const sockTrim = new THREE.Mesh(
+      new THREE.TorusGeometry(0.06, 0.012, 4, 12),
+      new THREE.MeshStandardMaterial({ color: 0xffaecb }));
+    sockTrim.scale.set(1, 0.5, 1);
+    sockTrim.position.set(sx * 0.11, -0.13, -0.3);
+    sockTrim.rotation.x = Math.PI / 2;
+    girl.add(sockTrim);
+  }
+
+  root.add(girl);
   root.userData.hover = true;
   return root;
 }
 
 // =============================================================
-// Игрок: Аниса (по фото Anisa_model.png)
-// Тёмные волосы в двух хвостиках с розовыми резинками, розовое платье
-// с кружевным воротником, белый ванильный шарик-«твист» на вафельном
-// рожке, розовые туфельки.
+// Игрок: Аниса — ГОРИЗОНТАЛЬНЫЙ рожок (как «летающая метла»)
+// Конус лежит вдоль Z: тип в +Z (хвост сзади), широкая сторона с шариком
+// мороженого спереди (-Z, по ходу движения). Девочка сидит сверху на
+// шарике, корпус компактный (голова ≈ y 1.3, проходит под шлагбаумом).
 // =============================================================
 function buildAnisaOnCone() {
   const root = new THREE.Group();
 
-  // ---- Рожок мороженого ----
-  const coneGroup = new THREE.Group();
+  // ---- Горизонтальный рожок ----
   const wafMat = new THREE.MeshStandardMaterial({ color: 0xd9a45c, roughness: 0.85 });
-  const conePart = new THREE.Mesh(new THREE.ConeGeometry(0.55, 1.1, 16, 1, true), wafMat);
-  conePart.rotation.x = Math.PI; // остриё вниз
-  conePart.position.y = 0.55;
-  coneGroup.add(conePart);
-  // Вафельная сетка — два слоя колец «крест-накрест» для имитации ромбов
-  for (let i = 0; i < 5; i++) {
-    const y = 0.18 + i * 0.18;
-    const ringR = y * 0.5 + 0.02;
+  const cone = new THREE.Mesh(
+    new THREE.ConeGeometry(0.4, 1.1, 20, 1, true), wafMat);
+  cone.rotation.x = Math.PI / 2;   // тип → +Z, база → -Z
+  cone.position.set(0, 0, 0);
+  root.add(cone);
+
+  // Поперечные кольца вафли (радиус сужается от базы к острию)
+  for (let i = 0; i < 6; i++) {
+    const t = i / 5;
+    const z = -0.55 + t * 1.1;            // от -0.55 (база) до +0.55 (тип)
+    const r = 0.4 * (1 - t) + 0.018;      // радиус конуса в этой точке + offset
     const ring = new THREE.Mesh(
-      new THREE.TorusGeometry(ringR, 0.018, 4, 18),
+      new THREE.TorusGeometry(r, 0.018, 4, 22),
       new THREE.MeshStandardMaterial({ color: 0xa67a3e, roughness: 0.9 }));
-    ring.position.y = y; ring.rotation.x = Math.PI / 2;
-    coneGroup.add(ring);
+    ring.position.z = z;                   // тор лежит в плоскости XY (ось — Z)
+    root.add(ring);
   }
-  // Диагональные «насечки» вафельного узора — короткие капсулы по поверхности
-  for (let lap = 0; lap < 12; lap++) {
-    const a = (lap / 12) * Math.PI * 2;
-    const stripe = new THREE.Mesh(
-      new THREE.BoxGeometry(0.02, 1.05, 0.025),
-      new THREE.MeshStandardMaterial({ color: 0xa67a3e, roughness: 0.9 }));
-    // Радиус посередине конуса (y=0.55) ≈ 0.275
-    stripe.position.set(Math.cos(a) * 0.28, 0.55, Math.sin(a) * 0.28);
-    stripe.lookAt(new THREE.Vector3(Math.cos(a) * 1, 0.55, Math.sin(a) * 1));
-    stripe.rotation.x = 0.18; // лёгкий наклон по конусу
-    coneGroup.add(stripe);
+  // Продольные «насечки» вафли (12 штук вокруг конуса) — для ромбовидного узора
+  const stripeMat = new THREE.MeshStandardMaterial({ color: 0xa67a3e, roughness: 0.9 });
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2;
+    const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.018, 1.05), stripeMat);
+    // Размещаем на средней «обёртке» (z=0, радиус ~ 0.21)
+    stripe.position.set(Math.cos(a) * 0.22, Math.sin(a) * 0.22, 0);
+    stripe.rotation.z = a;
+    root.add(stripe);
   }
 
-  // Белый ванильный «твист» — стопка сфер по уменьшающемуся радиусу со
-  // спиральным сдвигом, чтобы получилась характерная закрутка soft-serve
+  // ---- Белый ванильный «твист» спереди (нос корабля) ----
   const creamMat = new THREE.MeshStandardMaterial({
-    color: 0xfff8f0, roughness: 0.5,
-    emissive: 0xfff0e8, emissiveIntensity: 0.05,
-  });
+    color: 0xfff8f0, roughness: 0.45,
+    emissive: 0xfff0e8, emissiveIntensity: 0.06 });
   const swirlLayers = 6;
   for (let i = 0; i < swirlLayers; i++) {
-    const t = i / (swirlLayers - 1); // 0..1
-    const r = 0.55 - t * 0.32;        // 0.55 → 0.23
-    const yi = 1.05 + t * 0.7;        // 1.05 → 1.75
-    const ang = t * Math.PI * 1.6;    // спиральный сдвиг
+    const t = i / (swirlLayers - 1);
+    const r = 0.5 - t * 0.30;          // 0.5 → 0.20
+    const zi = -0.55 - t * 0.55;       // -0.55 (внутри базы) → -1.10 (передний край)
+    const ang = t * Math.PI * 1.6;
     const layer = new THREE.Mesh(new THREE.SphereGeometry(r, 18, 14), creamMat);
-    layer.scale.y = 0.85;
-    layer.position.set(Math.cos(ang) * 0.04 * (1 - t), yi, Math.sin(ang) * 0.04 * (1 - t));
-    coneGroup.add(layer);
+    layer.scale.z = 0.85;
+    layer.position.set(Math.cos(ang) * 0.04 * (1 - t),
+                        Math.sin(ang) * 0.04 * (1 - t),
+                        zi);
+    root.add(layer);
   }
-  // Завитушка на самом верху — маленький конус-«пик»
-  const tip = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.28, 12), creamMat);
-  tip.position.y = 1.95;
-  coneGroup.add(tip);
-  root.add(coneGroup);
+  // Маленький конус-«пик» твиста на самом носу
+  const noseTip = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.22, 12), creamMat);
+  noseTip.rotation.x = -Math.PI / 2;   // острие → -Z (вперёд)
+  noseTip.position.z = -1.22;
+  root.add(noseTip);
 
-  // ---- Девочка (по фото: тёмные волосы, розовое платье) ----
+  // ---- Девочка (СИДИТ на шарике сверху, лицом вперёд / в -Z) ----
+  // Все локальные координаты девочки выставлены в root frame.
+  // Шарик мороженого: центр (0, 0, -0.55), радиус 0.5 → верх y ≈ 0.5.
+  // Делаем «бёдра» (butt) в (0, 0.5, -0.55), всё остальное — выше.
   const girl = new THREE.Group();
   const skinMat   = new THREE.MeshStandardMaterial({ color: 0xf2c79b, roughness: 0.85 });
-  const dressMat  = new THREE.MeshStandardMaterial({ color: 0xd17a8e, roughness: 0.7 });   // приглушённый розовый
-  const dressAcc  = new THREE.MeshStandardMaterial({ color: 0xe89aac, roughness: 0.65 });  // светлее для воротника/манжет
+  const dressMat  = new THREE.MeshStandardMaterial({ color: 0xd17a8e, roughness: 0.7 });
+  const dressAcc  = new THREE.MeshStandardMaterial({ color: 0xe89aac, roughness: 0.65 });
   const hairMat   = new THREE.MeshStandardMaterial({ color: 0x2a1810, roughness: 0.95 });
   const ribbonMat = new THREE.MeshStandardMaterial({ color: 0xf48aa6, roughness: 0.55 });
   const shoeMat   = new THREE.MeshStandardMaterial({ color: 0xf6a8be, roughness: 0.6 });
+  const lipMat    = new THREE.MeshStandardMaterial({ color: 0xc24a78, roughness: 0.5 });
+  const cheekMat  = new THREE.MeshStandardMaterial({
+    color: 0xff9bb9, transparent: true, opacity: 0.55, roughness: 0.6 });
 
-  // Юбка — конус, чуть пышнее чем у Аклимы
-  const skirt = new THREE.Mesh(new THREE.ConeGeometry(0.42, 0.5, 16), dressMat);
-  skirt.position.set(0, 2.18, 0.05); girl.add(skirt);
+  const HZ = -0.55; // глобальное Z, на котором сидит девочка (центр шарика)
+
+  // Бёдра/попа на шарике
+  const hips = new THREE.Mesh(new THREE.SphereGeometry(0.2, 14, 10), dressMat);
+  hips.scale.set(1.15, 0.7, 1.0); hips.position.set(0, 0.55, HZ + 0.05);
+  girl.add(hips);
+
+  // Юбка
+  const skirt = new THREE.Mesh(new THREE.ConeGeometry(0.32, 0.28, 16), dressMat);
+  skirt.position.set(0, 0.62, HZ + 0.05); girl.add(skirt);
+  const skirtHem = new THREE.Mesh(
+    new THREE.TorusGeometry(0.3, 0.022, 6, 22), dressAcc);
+  skirtHem.position.set(0, 0.5, HZ + 0.05); skirtHem.rotation.x = Math.PI / 2;
+  girl.add(skirtHem);
+
   // Лиф
-  const bodice = new THREE.Mesh(new THREE.SphereGeometry(0.24, 14, 10), dressMat);
-  bodice.scale.set(1.0, 1.05, 0.88); bodice.position.set(0, 2.5, 0.05); girl.add(bodice);
-  // Кружевной воротник «полу-капля» — два сплющенных диска (передний + задний)
-  for (const dz of [-0.18, 0.18]) {
+  const bodice = new THREE.Mesh(new THREE.SphereGeometry(0.17, 14, 10), dressMat);
+  bodice.scale.set(1.0, 0.95, 0.85); bodice.position.set(0, 0.83, HZ + 0.02);
+  girl.add(bodice);
+
+  // Воротник кружевной
+  for (const dz of [-0.13, 0.13]) {
     const flap = new THREE.Mesh(
-      new THREE.SphereGeometry(0.18, 14, 10, 0, Math.PI * 2, 0, Math.PI / 2),
+      new THREE.SphereGeometry(0.13, 14, 10, 0, Math.PI * 2, 0, Math.PI / 2),
       dressAcc);
     flap.scale.set(1, 0.5, 0.6);
-    flap.position.set(0, 2.62, 0.05 + dz);
+    flap.position.set(0, 0.96, HZ + 0.02 + dz);
     flap.rotation.x = dz > 0 ? 0 : Math.PI;
     girl.add(flap);
   }
-  // Манжеты на рукавах
+
   // Шея + голова
-  const neckG = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.08, 0.1, 10), skinMat);
-  neckG.position.set(0, 2.7, 0.05); girl.add(neckG);
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.26, 18, 14), skinMat);
-  head.scale.set(1.0, 1.05, 1.0); head.position.set(0, 2.92, 0.05); girl.add(head);
+  const neckG = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.065, 0.08, 10), skinMat);
+  neckG.position.set(0, 1.0, HZ + 0.02); girl.add(neckG);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.21, 18, 14), skinMat);
+  head.scale.set(1.0, 1.05, 1.0); head.position.set(0, 1.18, HZ + 0.02);
+  girl.add(head);
 
-  // Тёмные волосы — основная «шапка»
-  const hairTop = new THREE.Mesh(new THREE.SphereGeometry(0.28, 16, 12), hairMat);
-  hairTop.scale.set(1.05, 0.78, 1.05); hairTop.position.set(0, 3.02, 0.02); girl.add(hairTop);
-  // Чёлка (короткая, по линии бровей)
-  const bangs = new THREE.Mesh(new THREE.SphereGeometry(0.16, 12, 10), hairMat);
-  bangs.scale.set(1.55, 0.4, 0.55); bangs.position.set(0, 2.95, -0.18); girl.add(bangs);
+  // Тёмные волосы + чёлка
+  const hairTop = new THREE.Mesh(new THREE.SphereGeometry(0.225, 16, 12), hairMat);
+  hairTop.scale.set(1.05, 0.78, 1.05); hairTop.position.set(0, 1.27, HZ - 0.02);
+  girl.add(hairTop);
+  const bangs = new THREE.Mesh(new THREE.SphereGeometry(0.13, 12, 10), hairMat);
+  bangs.scale.set(1.55, 0.4, 0.55); bangs.position.set(0, 1.20, HZ - 0.18);
+  girl.add(bangs);
 
-  // Два хвостика по бокам с розовыми резинками-бантами
+  // Два хвостика с розовыми резинками-бантами
   for (const sx of [-1, 1]) {
-    // Резинка у головы
-    const tieBall = new THREE.Mesh(new THREE.SphereGeometry(0.07, 10, 8), ribbonMat);
-    tieBall.position.set(sx * 0.27, 2.92, 0.02); girl.add(tieBall);
-    // Бантик — два сплющенных шара
+    const tieBall = new THREE.Mesh(new THREE.SphereGeometry(0.06, 10, 8), ribbonMat);
+    tieBall.position.set(sx * 0.22, 1.20, HZ - 0.02); girl.add(tieBall);
     for (const sy of [-1, 1]) {
-      const bow = new THREE.Mesh(new THREE.SphereGeometry(0.07, 10, 8), ribbonMat);
+      const bow = new THREE.Mesh(new THREE.SphereGeometry(0.06, 10, 8), ribbonMat);
       bow.scale.set(1.2, 0.5, 0.5);
-      bow.position.set(sx * 0.34, 2.92 + sy * 0.08, 0.02);
+      bow.position.set(sx * 0.28, 1.20 + sy * 0.07, HZ - 0.02);
       bow.rotation.z = sx * sy * 0.4;
       girl.add(bow);
     }
-    // Сам хвостик — наклонная капсула, расходится от уха вниз-в-сторону
-    const tail = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.06, 0.5, 10), hairMat);
-    tail.position.set(sx * 0.36, 2.7, 0.02);
+    const tail = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.05, 0.42, 10), hairMat);
+    tail.position.set(sx * 0.3, 1.0, HZ - 0.02);
     tail.rotation.z = sx * 0.5;
     girl.add(tail);
-    const tailTip = new THREE.Mesh(new THREE.SphereGeometry(0.06, 10, 8), hairMat);
-    tailTip.position.set(sx * 0.5, 2.45, 0.02);
-    girl.add(tailTip);
+    const tailTip = new THREE.Mesh(new THREE.SphereGeometry(0.05, 10, 8), hairMat);
+    tailTip.position.set(sx * 0.42, 0.78, HZ - 0.02); girl.add(tailTip);
   }
 
-  // Глаза + улыбка
+  // Лицо: глаза, реснички, румянец, улыбка (смотрит в -Z, вперёд)
   for (const sx of [-1, 1]) {
-    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.025, 8, 6),
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.022, 8, 6),
       new THREE.MeshStandardMaterial({ color: 0x1a0e08 }));
-    eye.position.set(sx * 0.075, 2.92, -0.21); girl.add(eye);
+    eye.position.set(sx * 0.065, 1.18, HZ - 0.18); girl.add(eye);
+    const lash = new THREE.Mesh(
+      new THREE.BoxGeometry(0.04, 0.005, 0.005),
+      new THREE.MeshStandardMaterial({ color: 0x1a0e08 }));
+    lash.position.set(sx * 0.065, 1.20, HZ - 0.19); girl.add(lash);
+    const cheek = new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 6), cheekMat);
+    cheek.scale.set(1, 0.6, 0.4);
+    cheek.position.set(sx * 0.11, 1.14, HZ - 0.18); girl.add(cheek);
   }
   const smile = new THREE.Mesh(
-    new THREE.TorusGeometry(0.05, 0.011, 6, 10, Math.PI),
-    new THREE.MeshStandardMaterial({ color: 0xc24a78 }));
-  smile.rotation.x = Math.PI; smile.position.set(0, 2.83, -0.22); girl.add(smile);
+    new THREE.TorusGeometry(0.04, 0.009, 6, 12, Math.PI), lipMat);
+  smile.rotation.x = Math.PI; smile.position.set(0, 1.11, HZ - 0.19);
+  girl.add(smile);
 
-  // Руки — обхватывают шарик мороженого (наклонены вперёд-вниз)
+  // Руки — впереди, как держит «руль» (передний край шарика)
   for (const sx of [-1, 1]) {
     const upperArm = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.07, 0.06, 0.3, 10), dressMat);
-    upperArm.position.set(sx * 0.27, 2.5, -0.02);
-    upperArm.rotation.z = sx * 0.5; upperArm.rotation.x = -0.4;
+      new THREE.CylinderGeometry(0.05, 0.045, 0.25, 10), dressMat);
+    upperArm.position.set(sx * 0.18, 0.83, HZ - 0.08);
+    upperArm.rotation.z = sx * 0.4; upperArm.rotation.x = -0.65;
     girl.add(upperArm);
-    // Манжет на кончике рукава
-    const cuff = new THREE.Mesh(
-      new THREE.TorusGeometry(0.075, 0.022, 6, 14), dressAcc);
-    cuff.position.set(sx * 0.34, 2.32, -0.16);
-    cuff.rotation.z = sx * 0.5; cuff.rotation.y = Math.PI / 2;
+    const cuff = new THREE.Mesh(new THREE.TorusGeometry(0.055, 0.018, 4, 12), dressAcc);
+    cuff.position.set(sx * 0.24, 0.7, HZ - 0.27);
+    cuff.rotation.z = sx * 0.4; cuff.rotation.y = Math.PI / 2;
     girl.add(cuff);
-    // Кисть лежит на «креме»
-    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), skinMat);
-    hand.position.set(sx * 0.32, 2.18, -0.18);
-    girl.add(hand);
+    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 6), skinMat);
+    hand.position.set(sx * 0.16, 0.6, HZ - 0.4); girl.add(hand);
   }
-  // Ножки свисают вниз по бокам шарика
+
+  // Ноги — вперёд по бокам шарика, голени свисают, ступни смотрят вперёд
   for (const sx of [-1, 1]) {
-    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.055, 0.4, 10), skinMat);
-    leg.position.set(sx * 0.16, 1.96, 0.18); leg.rotation.x = 0.15;
-    girl.add(leg);
-    const shoe = new THREE.Mesh(new THREE.SphereGeometry(0.075, 8, 6), shoeMat);
-    shoe.scale.set(1, 0.6, 1.3); shoe.position.set(sx * 0.18, 1.7, 0.27);
+    const thigh = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.07, 0.06, 0.3, 10), dressMat);
+    thigh.position.set(sx * 0.13, 0.5, HZ - 0.16);
+    thigh.rotation.x = Math.PI / 2 - 0.2;
+    girl.add(thigh);
+    const knee = new THREE.Mesh(new THREE.SphereGeometry(0.06, 10, 8), skinMat);
+    knee.position.set(sx * 0.13, 0.45, HZ - 0.32); girl.add(knee);
+    const shin = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.05, 0.045, 0.32, 10), skinMat);
+    shin.position.set(sx * 0.13, 0.28, HZ - 0.36);
+    shin.rotation.x = -0.15;
+    girl.add(shin);
+    const shoe = new THREE.Mesh(new THREE.SphereGeometry(0.07, 10, 8), shoeMat);
+    shoe.scale.set(1, 0.55, 1.4);
+    shoe.position.set(sx * 0.13, 0.12, HZ - 0.42);
     girl.add(shoe);
-    // Белая полоска-ремешок на туфельке
     const strap = new THREE.Mesh(
-      new THREE.TorusGeometry(0.07, 0.012, 4, 14),
+      new THREE.TorusGeometry(0.062, 0.011, 4, 12),
       new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 }));
     strap.scale.set(1, 0.4, 1.1);
-    strap.position.set(sx * 0.18, 1.74, 0.27);
+    strap.position.set(sx * 0.13, 0.15, HZ - 0.42);
     strap.rotation.x = Math.PI / 2;
     girl.add(strap);
   }
-  root.add(girl);
 
+  root.add(girl);
   root.userData.hover = true;
   return root;
 }
@@ -1180,39 +1297,58 @@ function buildOrange() {
 }
 
 function buildWatermelonSlice() {
-  // Долька арбуза: красная мякоть (полусфера) + зелёная корка снизу + чёрные семечки
+  // Полноценная D-образная долька: толстый зелёный «корпус», на передней
+  // и задней гранях — концентрические слои (светло-зелёная прослойка,
+  // белая, красная мякоть с семечками).
   const slice = new THREE.Group();
-  // Корка — половинка тонкого тора (зелёный полумесяц)
-  const rind = new THREE.Mesh(
-    new THREE.SphereGeometry(0.32, 16, 12, 0, Math.PI, 0, Math.PI),
-    new THREE.MeshStandardMaterial({ color: 0x5fa83a, roughness: 0.85, side: THREE.DoubleSide }));
-  rind.rotation.x = Math.PI / 2; rind.scale.z = 0.18;
-  slice.add(rind);
-  // Мякоть — чуть меньшая половинка, красная
-  const flesh = new THREE.Mesh(
-    new THREE.SphereGeometry(0.28, 16, 12, 0, Math.PI, 0, Math.PI),
-    new THREE.MeshStandardMaterial({
-      color: 0xff5a72, roughness: 0.6,
-      emissive: 0x661020, emissiveIntensity: 0.25, side: THREE.DoubleSide }));
-  flesh.rotation.x = Math.PI / 2; flesh.scale.z = 0.18;
-  flesh.position.y = 0.005;
-  slice.add(flesh);
-  // Светлый ободок — белая прослойка
-  const inner = new THREE.Mesh(
-    new THREE.SphereGeometry(0.305, 16, 12, 0, Math.PI, 0, Math.PI),
-    new THREE.MeshStandardMaterial({ color: 0xffe0d0, roughness: 0.7, side: THREE.DoubleSide }));
-  inner.rotation.x = Math.PI / 2; inner.scale.z = 0.181;
-  slice.add(inner);
-  // Семечки
-  for (let i = 0; i < 6; i++) {
-    const seed = new THREE.Mesh(
-      new THREE.SphereGeometry(0.025, 6, 5),
-      new THREE.MeshStandardMaterial({ color: 0x2a1a10 }));
-    const a = -Math.PI / 2 + (i / 5) * Math.PI - Math.PI / 12;
-    seed.position.set(Math.cos(a) * 0.18, Math.sin(a) * 0.18, 0.07);
-    seed.scale.set(1, 1.6, 0.6);
-    slice.add(seed);
+  const DEPTH = 0.20;
+
+  // Половинка-диск (плоская грань = диаметр, дуга = корка)
+  function halfDiscShape(radius) {
+    const s = new THREE.Shape();
+    s.moveTo(-radius, 0);
+    s.lineTo(radius, 0);
+    s.absarc(0, 0, radius, 0, Math.PI, false);
+    return s;
   }
+  function makeLayer(radius, color, z, depth) {
+    const geo = new THREE.ExtrudeGeometry(halfDiscShape(radius),
+      { depth, bevelEnabled: false, curveSegments: 24 });
+    const m = new THREE.Mesh(geo,
+      new THREE.MeshStandardMaterial({ color, roughness: 0.7 }));
+    m.position.z = z;
+    return m;
+  }
+
+  // Зелёная корка — основной 3D-блок (виден со всех сторон, включая бок)
+  slice.add(makeLayer(0.36, 0x2c5e1a, -DEPTH / 2, DEPTH));
+  // На передней и задней гранях — концентрические венчики:
+  // светло-зелёная прослойка → белая → красная мякоть.
+  const FRONT_Z = DEPTH / 2 + 0.001;
+  const BACK_Z  = -DEPTH / 2 - 0.006;
+  slice.add(makeLayer(0.33, 0x8fc962, FRONT_Z,         0.005));
+  slice.add(makeLayer(0.30, 0xfff2d8, FRONT_Z + 0.005, 0.005));
+  slice.add(makeLayer(0.275, 0xff4760, FRONT_Z + 0.010, 0.005));
+  slice.add(makeLayer(0.33, 0x8fc962, BACK_Z,          0.005));
+  slice.add(makeLayer(0.30, 0xfff2d8, BACK_Z - 0.005,  0.005));
+  slice.add(makeLayer(0.275, 0xff4760, BACK_Z - 0.010, 0.005));
+
+  // Семечки на ОБОИХ красных лицах
+  const seedMat = new THREE.MeshStandardMaterial({ color: 0x1a0e08, roughness: 0.6 });
+  for (const zSign of [-1, 1]) {
+    const zPos = zSign === 1 ? FRONT_Z + 0.018 : BACK_Z - 0.018;
+    for (let i = 0; i < 7; i++) {
+      const a = Math.PI * 0.18 + (i / 6) * Math.PI * 0.64;
+      const r = 0.10 + (i % 2) * 0.08;
+      const seed = new THREE.Mesh(new THREE.SphereGeometry(0.025, 6, 5), seedMat);
+      seed.scale.set(0.7, 1.5, 0.5);
+      seed.position.set(Math.cos(a) * r, Math.sin(a) * r, zPos);
+      slice.add(seed);
+    }
+  }
+
+  // Лёгкий наклон вперёд — при спине вокруг Y слой видится чуть «нависающим»
+  slice.rotation.x = -0.25;
   return slice;
 }
 
@@ -1606,10 +1742,7 @@ function buildCharacterGrid() {
     const card = document.createElement('button');
     card.className = 'char-card' + (c.locked ? ' locked' : '');
     card.dataset.id = c.id;
-    card.innerHTML =
-      `<span class="char-emoji">${c.emoji}</span>` +
-      `<div class="char-name">${c.name}</div>` +
-      `<div class="char-sub">${c.desc || ''}</div>`;
+    card.innerHTML = `<span class="char-name">${c.name}</span>`;
     if (!c.locked) card.addEventListener('click', () => pickCharacter(c.id));
     grid.appendChild(card);
   }
