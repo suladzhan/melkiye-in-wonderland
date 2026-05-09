@@ -151,7 +151,7 @@ const CHARACTERS = {
     audio: {
       bg: 'Characters/Аниса/anisa_main_sound.mp3',
     },
-    collect: { icon: '🍫' },
+    collect: { icon: '🍦' },
   },
   arslan_abdulla: { id: 'arslan_abdulla', name: 'Арслан и Абдулла', locked: true },
   osman:          { id: 'osman',          name: 'Осман',           locked: true },
