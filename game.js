@@ -245,77 +245,127 @@ function buildSky() {
   scene.add(new THREE.Mesh(skyGeo, skyMat));
 }
 
-// ---------- Песочный путь через пустыню ----------
+// ---------- Шоссе на 3 полосы (асфальт + разметка) ----------
+// Геометрия дороги: 8м ширина × 400м длина. LANES = [-2.2, 0, 2.2] —
+// центры полос. Разметка запекается в текстуру (тайл = 8м длины),
+// чтобы при скролле прерывистые линии плавно бежали навстречу.
 function buildRoad() {
-  // Процедурная текстура песка — шум из эллипсов разных оттенков
+  // Канвас ровно один тайл вдоль дороги: 256px ширина (8м → 32px/м),
+  // 1024px высота (8м длины → 128px/м, чтобы штрихи получились чёткие).
   const c = document.createElement('canvas');
-  c.width = 512; c.height = 512;
+  c.width = 256; c.height = 1024;
   const g = c.getContext('2d');
-  // базовая заливка
-  g.fillStyle = '#d9b072';
+
+  // База: тёмно-серый асфальт
+  g.fillStyle = '#2c2e30';
   g.fillRect(0, 0, c.width, c.height);
-  // мелкие пятна песка
-  for (let i = 0; i < 1800; i++) {
+
+  // Гравийная зернистость — мелкие пятна разных оттенков
+  for (let i = 0; i < 6000; i++) {
     const x = Math.random() * c.width;
     const y = Math.random() * c.height;
-    const r = 1 + Math.random() * 3;
+    const r = 0.5 + Math.random() * 1.5;
     const v = Math.random();
-    g.fillStyle = v < 0.33 ? 'rgba(180,140,90,0.45)'
-              : v < 0.66 ? 'rgba(238,205,150,0.4)'
-                         : 'rgba(120,90,60,0.25)';
+    g.fillStyle = v < 0.4 ? 'rgba(60,60,62,0.6)'
+              : v < 0.75 ? 'rgba(85,87,90,0.45)'
+                         : 'rgba(115,118,120,0.35)';
     g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
   }
-  // редкие следы / трещины
-  g.strokeStyle = 'rgba(120,90,60,0.15)';
-  g.lineWidth = 1;
-  for (let i = 0; i < 40; i++) {
+  // Редкие тёмные пятна / следы масла для живости
+  for (let i = 0; i < 25; i++) {
+    g.fillStyle = `rgba(15,15,18,${0.10 + Math.random() * 0.18})`;
     g.beginPath();
-    g.moveTo(Math.random() * c.width, Math.random() * c.height);
-    g.bezierCurveTo(
+    g.ellipse(
       Math.random() * c.width, Math.random() * c.height,
-      Math.random() * c.width, Math.random() * c.height,
-      Math.random() * c.width, Math.random() * c.height,
+      8 + Math.random() * 28, 3 + Math.random() * 12,
+      Math.random() * Math.PI, 0, Math.PI * 2,
     );
-    g.stroke();
+    g.fill();
   }
+
+  // ---- Разметка (запекаем в ту же текстуру) ----
+  // Дорога 8м, канвас 256px → 32 px/м по X. Мировой X→canvas X: (x+4)*32.
+  const PX_PER_M_X = c.width / 8;
+  const PX_PER_M_Y = c.height / 8;
+  const LINE_W = Math.max(2, 0.18 * PX_PER_M_X); // ~18см
+
+  g.fillStyle = '#f1ead6';
+  // Сплошные краевые линии чуть внутри края дороги (x = ±3.7)
+  for (const ex of [-3.7, 3.7]) {
+    const px = (ex + 4) * PX_PER_M_X;
+    g.fillRect(px - LINE_W / 2, 0, LINE_W, c.height);
+  }
+
+  // Прерывистые линии между полосами (x = ±1.1).
+  // Стандартный ритм трассы: 2м штрих + 2м промежуток → 4 штриха на тайл.
+  const DASH = 2 * PX_PER_M_Y;
+  const GAP  = 2 * PX_PER_M_Y;
+  for (const lx of [-1.1, 1.1]) {
+    const px = (lx + 4) * PX_PER_M_X;
+    for (let y = 0; y < c.height; y += DASH + GAP) {
+      g.fillRect(px - LINE_W / 2, y, LINE_W, DASH);
+    }
+  }
+
   roadTexture = new THREE.CanvasTexture(c);
   roadTexture.colorSpace = THREE.SRGBColorSpace;
-  roadTexture.wrapS = THREE.RepeatWrapping;
-  roadTexture.wrapT = THREE.RepeatWrapping;
-  roadTexture.repeat.set(2, 32);
+  roadTexture.wrapS = THREE.ClampToEdgeWrapping; // ширина не тайлится
+  roadTexture.wrapT = THREE.RepeatWrapping;       // длина — да
+  roadTexture.repeat.set(1, 50);                  // 50 тайлов × 8м = 400м
   roadTexture.anisotropy = 8;
 
-  // Дорожка-тропинка — чуть утоптанная, светлее краёв
+  // Само полотно шоссе
   const pathGeo = new THREE.PlaneGeometry(8, 400);
   const pathMat = new THREE.MeshStandardMaterial({
-    map: roadTexture, roughness: 1.0, color: 0xefd0a0,
+    map: roadTexture, roughness: 0.9, metalness: 0.0, color: 0xffffff,
   });
   road = new THREE.Mesh(pathGeo, pathMat);
   road.rotation.x = -Math.PI / 2;
   road.position.y = 0;
   scene.add(road);
 
-  // Дюны / пустыня вокруг — отдельная текстура темнее, с неровностями
-  const sandTex = roadTexture.clone();
-  sandTex.needsUpdate = true;
+  // Бетонные обочины по бокам шоссе — узкие светло-серые полосы
+  const shoulderMat = new THREE.MeshStandardMaterial({
+    color: 0x8e8a80, roughness: 0.95, metalness: 0.0,
+  });
+  for (const sx of [-4.5, 4.5]) {
+    const shoulder = new THREE.Mesh(new THREE.PlaneGeometry(1.0, 400), shoulderMat);
+    shoulder.rotation.x = -Math.PI / 2;
+    shoulder.position.set(sx, -0.005, 0);
+    scene.add(shoulder);
+  }
+
+  // Песок/пустыня по сторонам — чтобы шоссе явно шло через Дубай-пустыню
+  const sandCanvas = document.createElement('canvas');
+  sandCanvas.width = 512; sandCanvas.height = 512;
+  const sg = sandCanvas.getContext('2d');
+  sg.fillStyle = '#d9b072';
+  sg.fillRect(0, 0, sandCanvas.width, sandCanvas.height);
+  for (let i = 0; i < 1800; i++) {
+    const x = Math.random() * sandCanvas.width;
+    const y = Math.random() * sandCanvas.height;
+    const r = 1 + Math.random() * 3;
+    const v = Math.random();
+    sg.fillStyle = v < 0.33 ? 'rgba(180,140,90,0.45)'
+              : v < 0.66 ? 'rgba(238,205,150,0.4)'
+                         : 'rgba(120,90,60,0.25)';
+    sg.beginPath(); sg.arc(x, y, r, 0, Math.PI * 2); sg.fill();
+  }
+  const sandTex = new THREE.CanvasTexture(sandCanvas);
+  sandTex.colorSpace = THREE.SRGBColorSpace;
+  sandTex.wrapS = THREE.RepeatWrapping;
+  sandTex.wrapT = THREE.RepeatWrapping;
   sandTex.repeat.set(8, 40);
+  sandTex.anisotropy = 4;
+
   const dunesMat = new THREE.MeshStandardMaterial({
     map: sandTex, color: 0xc99a5e, roughness: 1.0,
   });
   const dunesGeo = new THREE.PlaneGeometry(160, 400, 1, 1);
   const dunes = new THREE.Mesh(dunesGeo, dunesMat);
   dunes.rotation.x = -Math.PI / 2;
-  dunes.position.y = -0.03;
+  dunes.position.y = -0.04;
   scene.add(dunes);
-
-  // Лёгкие «колеи» по краям дорожки — тёмные полоски
-  const rutMat = new THREE.MeshBasicMaterial({ color: 0xa67a48, transparent: true, opacity: 0.35 });
-  for (const sx of [-3.4, 3.4]) {
-    const rut = new THREE.Mesh(new THREE.PlaneGeometry(0.4, 400), rutMat);
-    rut.rotation.x = -Math.PI / 2;
-    rut.position.set(sx, 0.001, 0);
-    scene.add(rut);
-  }
 }
 
 // ---------- Скайлайн Дубая на горизонте ----------
@@ -1365,8 +1415,9 @@ function update(dt) {
   farthestRowZ += advance;
   farthestBuildingZ += advance;
 
-  // Анимация дороги
-  if (roadTexture) roadTexture.offset.y -= advance / 25;
+  // Анимация дороги: 1 V-юнит = 8м (см. repeat в buildRoad), скроллим
+  // ровно со скоростью мира — иначе прерывистая разметка «плывёт».
+  if (roadTexture) roadTexture.offset.y -= advance / 8;
 
   // Удаляем то, что уехало за камеру
   pruneBehind(activeObstacles);
