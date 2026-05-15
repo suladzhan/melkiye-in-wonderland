@@ -136,7 +136,7 @@ const CHARACTERS = {
     locked: false, bestKey: 'best_muhammad', theme: 'dubai',
     audio: {
       bg: 'Characters/Мухаммад/muhammad_main_sound.mp3',
-      gameover: 'Characters/Мухаммад/muhammad_gameover_sound.mp3',
+      
     },
     collect: { icon: '🍊' },
   },
@@ -3717,7 +3717,7 @@ function gameOver() {
   document.getElementById('gameover-screen').classList.remove('hidden');
 
   audio.duckBg();
-  audio.playGameover();
+  
 }
 
 // =============================================================
