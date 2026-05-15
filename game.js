@@ -3941,12 +3941,14 @@ function update(dt) {
 
   // Покачивание модели + у летающих героев — медленный «парящий» подъём
   const bob = currentCharacter && currentCharacter.id === 'arslan_abdulla'
-  ? 0
-  : Math.sin(performance.now() * 0.012) * 0.05;
+    ? 0
+    : Math.sin(performance.now() * 0.012) * 0.05;
   if (player.userData.modelHolder) {
     const hover = player.userData.hover ? 0.3 + Math.sin(performance.now() * 0.0028) * 0.06 : 0;
     player.userData.modelHolder.position.y = bob + hover;
-    player.userData.modelHolder.rotation.z = Math.sin(performance.now() * 0.012) * 0.05;
+    player.userData.modelHolder.rotation.z = currentCharacter && currentCharacter.id === 'arslan_abdulla'
+      ? 0
+      : Math.sin(performance.now() * 0.012) * 0.05;
   }
 
   // Тень
