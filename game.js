@@ -1,7 +1,8 @@
 // =============================================================
 // Мелкие в мире чудес — мульти-персонажный 3D-раннер на Three.js
 // Один файл логики, без сборки. Игроки: Мухаммад (Дубай-капибара),
-// Аклима (стол-летун в конфетном мире), Аниса (рожок мороженого).
+// Аклима (стол-летун в конфетном мире), Аниса (рожок мороженого),
+// Осман (мальчик на метле в небе у Хогвартса, собирает золотые слитки).
 // Каждый персонаж задаёт собственное небо, землю, скайлайн, модель,
 // собираемый предмет и три типа препятствий.
 // =============================================================
@@ -153,10 +154,17 @@ const CHARACTERS = {
     },
     collect: { icon: '🍦' },
   },
+  osman: {
+    id: 'osman', name: 'Осман',
+    locked: false, bestKey: 'best_osman', theme: 'hogwarts',
+    audio: {
+      bg: 'Characters/Осман/osman_main_sound.mp3',
+    },
+    collect: { icon: '🪙' },
+  },
   arslan_abdulla: { id: 'arslan_abdulla', name: 'Арслан и Абдулла', locked: true },
-  osman:          { id: 'osman',          name: 'Осман',           locked: true },
 };
-const CHARACTER_ORDER = ['muhammad', 'aklima', 'anisa', 'arslan_abdulla', 'osman'];
+const CHARACTER_ORDER = ['muhammad', 'aklima', 'anisa', 'osman', 'arslan_abdulla'];
 
 // ---------- Глобальное состояние ----------
 let scene, camera, renderer, clock;
@@ -277,14 +285,25 @@ function applyCharacter(char) {
   if (char.theme === 'dubai') {
     scene.background = new THREE.Color(0xf6c98e);
     scene.fog = new THREE.Fog(0xf2c98c, 45, 130);
+  } else if (char.theme === 'hogwarts') {
+    scene.background = new THREE.Color(0x2c3360);
+    scene.fog = new THREE.Fog(0x3a4078, 60, 150);
   } else {
     scene.background = new THREE.Color(0xffd0e8);
     scene.fog = new THREE.Fog(0xfddbe9, 50, 140);
   }
 
   // Земля + скайлайн
-  themeRefs.groundMeshes = char.theme === 'dubai' ? buildHighway() : buildCandyPath();
-  themeRefs.skylineGroup = char.theme === 'dubai' ? buildDubaiSkyline() : buildCandySkyline();
+  if (char.theme === 'dubai') {
+    themeRefs.groundMeshes = buildHighway();
+    themeRefs.skylineGroup = buildDubaiSkyline();
+  } else if (char.theme === 'hogwarts') {
+    themeRefs.groundMeshes = buildHogwartsPath();
+    themeRefs.skylineGroup = buildHogwartsSkyline();
+  } else {
+    themeRefs.groundMeshes = buildCandyPath();
+    themeRefs.skylineGroup = buildCandySkyline();
+  }
   scene.add(themeRefs.skylineGroup);
 
   // Шаблоны спавнов под выбранного героя
@@ -333,6 +352,17 @@ function buildLights(char) {
     const rim = new THREE.DirectionalLight(0xff8c4a, 0.55);
     rim.position.set(10, 5, 10);
     scene.add(rim); themeRefs.lights.push(rim);
+  } else if (char.theme === 'hogwarts') {
+    // Хогвартс: яркий лунный свет сверху + тёплый «оконный» контр от замка.
+    // Сцена сумеречная, но достаточно светлая для комфортной игры.
+    const moon = new THREE.DirectionalLight(0xc8d2ff, 1.45);
+    moon.position.set(12, 22, -10);
+    scene.add(moon); themeRefs.lights.push(moon);
+    const hemi = new THREE.HemisphereLight(0x7a86b0, 0x3a3858, 1.05);
+    scene.add(hemi); themeRefs.lights.push(hemi);
+    const windowRim = new THREE.DirectionalLight(0xffc080, 0.6);
+    windowRim.position.set(-8, 4, -15);
+    scene.add(windowRim); themeRefs.lights.push(windowRim);
   } else {
     // Конфетный мир: мягкий розовый свет, бирюзовый «контр» от облаков
     const sun = new THREE.DirectionalLight(0xfff4e0, 1.1);
@@ -353,6 +383,8 @@ function buildSky(char) {
   const skyGeo = new THREE.SphereGeometry(150, 24, 16);
   const colors = char.theme === 'dubai'
     ? { top: 0x6fb6ff, mid: 0xffb265, bottom: 0xffe0a0 }
+    : char.theme === 'hogwarts'
+    ? { top: 0x1a2658, mid: 0x4a3e80, bottom: 0x7a6ab0 }
     : { top: 0xfde0eb, mid: 0xffc8d8, bottom: 0xfff5f1 };
   const skyMat = new THREE.ShaderMaterial({
     side: THREE.BackSide,
@@ -553,6 +585,85 @@ function buildCandyPath() {
 }
 
 // =============================================================
+// Магическая облачная дорожка (Осман / Хогвартс) — Осман летит ПО НЕБУ,
+// под ним — мягкая периwinкл-облачная подложка с белыми бликами
+// и тёплой золотисто-голубой руной-разметкой полос
+// =============================================================
+function buildHogwartsPath() {
+  const refs = [];
+  const c = document.createElement('canvas');
+  c.width = 256; c.height = 1024;
+  const g = c.getContext('2d');
+
+  // Светлая лилово-голубая облачная база с яркой центральной полосой
+  const grad = g.createLinearGradient(0, 0, c.width, 0);
+  grad.addColorStop(0,   '#6e72a8');   // мягкие края
+  grad.addColorStop(0.2, '#9498c4');
+  grad.addColorStop(0.5, '#bcc0e0');   // светящийся центр пути
+  grad.addColorStop(0.8, '#9498c4');
+  grad.addColorStop(1,   '#6e72a8');
+  g.fillStyle = grad; g.fillRect(0, 0, c.width, c.height);
+
+  // Пухлые облачные клочки — мягкие белые радиальные градиенты
+  for (let i = 0; i < 60; i++) {
+    const x = Math.random() * c.width, y = Math.random() * c.height;
+    const r = 25 + Math.random() * 55;
+    const cg = g.createRadialGradient(x, y, 0, x, y, r);
+    cg.addColorStop(0, `rgba(255,255,255,${0.14 + Math.random() * 0.18})`);
+    cg.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = cg;
+    g.fillRect(x - r, y - r, r * 2, r * 2);
+  }
+  // Сияющие звёздочки-блики
+  for (let i = 0; i < 220; i++) {
+    g.fillStyle = `rgba(255,255,255,${0.4 + Math.random() * 0.5})`;
+    g.beginPath();
+    g.arc(Math.random() * c.width, Math.random() * c.height,
+      0.5 + Math.random() * 0.9, 0, Math.PI * 2);
+    g.fill();
+  }
+  // Разметка полос на небесной дорожке намеренно отсутствует —
+  // под Османа это «открытое небо», без линий.
+
+  groundTexture = new THREE.CanvasTexture(c);
+  groundTexture.colorSpace = THREE.SRGBColorSpace;
+  groundTexture.wrapS = THREE.ClampToEdgeWrapping;
+  groundTexture.wrapT = THREE.RepeatWrapping;
+  groundTexture.repeat.set(1, 50);
+  groundTexture.anisotropy = 8;
+
+  const path = new THREE.Mesh(
+    new THREE.PlaneGeometry(8, 400),
+    new THREE.MeshStandardMaterial({
+      map: groundTexture, roughness: 0.75, color: 0xffffff,
+      emissive: 0x5862a8, emissiveIntensity: 0.28,
+    }));
+  path.rotation.x = -Math.PI / 2;
+  scene.add(path); refs.push(path);
+
+  // Облачные «обочины» — чуть бледнее основной полосы
+  const cloudEdge = new THREE.MeshStandardMaterial({
+    color: 0xa8acd0, roughness: 0.95,
+    emissive: 0x4a5290, emissiveIntensity: 0.15 });
+  for (const sx of [-4.5, 4.5]) {
+    const sh = new THREE.Mesh(new THREE.PlaneGeometry(1.0, 400), cloudEdge);
+    sh.rotation.x = -Math.PI / 2;
+    sh.position.set(sx, -0.005, 0);
+    scene.add(sh); refs.push(sh);
+  }
+
+  // Дальняя ватная «бездна» вокруг — гораздо светлее, чтоб не было «дыры» в чёрное
+  const mist = new THREE.Mesh(
+    new THREE.PlaneGeometry(160, 400),
+    new THREE.MeshStandardMaterial({ color: 0x3a4078, roughness: 1.0 }));
+  mist.rotation.x = -Math.PI / 2;
+  mist.position.y = -0.04;
+  scene.add(mist); refs.push(mist);
+
+  return refs;
+}
+
+// =============================================================
 // Скайлайн: Дубай (по силуэтам известных башен)
 // =============================================================
 function buildDubaiSkyline() {
@@ -735,6 +846,158 @@ function buildCandySkyline() {
 }
 
 // =============================================================
+// Скайлайн: Хогвартс (Осман) — замок с башнями, луна, звёзды, лес
+// =============================================================
+function buildHogwartsSkyline() {
+  const skyline = new THREE.Group();
+  skyline.position.set(0, 0, -110);
+
+  // Большая луна с гало
+  const moon = new THREE.Mesh(
+    new THREE.SphereGeometry(7, 24, 18),
+    new THREE.MeshBasicMaterial({ color: 0xfff5d6 }));
+  moon.position.set(28, 36, -10);
+  skyline.add(moon);
+  // Тёмные «кратеры» — пятна на луне
+  for (let i = 0; i < 4; i++) {
+    const crater = new THREE.Mesh(
+      new THREE.SphereGeometry(0.9 + Math.random() * 0.6, 10, 8),
+      new THREE.MeshBasicMaterial({ color: 0xd8c8a0, transparent: true, opacity: 0.5 }));
+    const a = Math.random() * Math.PI * 2;
+    const r = 3 + Math.random() * 2.5;
+    crater.position.set(28 + Math.cos(a) * r * 0.7,
+                         36 + Math.sin(a) * r * 0.7, -9.5);
+    skyline.add(crater);
+  }
+  // Гало
+  const halo = new THREE.Mesh(
+    new THREE.SphereGeometry(9.5, 16, 12),
+    new THREE.MeshBasicMaterial({ color: 0xfff0c0, transparent: true, opacity: 0.16 }));
+  halo.position.copy(moon.position);
+  skyline.add(halo);
+
+  // Звёзды — россыпь маленьких базовых сфер по фону
+  for (let i = 0; i < 90; i++) {
+    const star = new THREE.Mesh(
+      new THREE.SphereGeometry(0.12 + Math.random() * 0.22, 6, 5),
+      new THREE.MeshBasicMaterial({ color: 0xffffff }));
+    star.position.set(
+      -65 + Math.random() * 130,
+      14 + Math.random() * 38,
+      -16 + Math.random() * 8,
+    );
+    skyline.add(star);
+  }
+
+  // Замок Хогвартс — кластер каменных башен (на тон светлее для читаемости)
+  const stoneMat = new THREE.MeshStandardMaterial({ color: 0x4a4868, roughness: 0.9 });
+  const roofMat  = new THREE.MeshStandardMaterial({ color: 0x2a2848, roughness: 0.85 });
+  const winMat   = new THREE.MeshStandardMaterial({
+    color: 0xffd070, emissive: 0xffa040, emissiveIntensity: 1.4 });
+
+  function makeTower(x, baseR, baseH, topR, spireH) {
+    const t = new THREE.Group();
+    const body = new THREE.Mesh(
+      new THREE.CylinderGeometry(topR, baseR, baseH, 12), stoneMat);
+    body.position.y = baseH / 2; t.add(body);
+    const spire = new THREE.Mesh(
+      new THREE.ConeGeometry(topR * 1.15, spireH, 12), roofMat);
+    spire.position.y = baseH + spireH / 2; t.add(spire);
+    // Светящиеся окна
+    const rings = Math.max(2, Math.floor(baseH / 2.2));
+    for (let i = 1; i <= rings; i++) {
+      const y = (i / (rings + 1)) * baseH;
+      for (let a = 0; a < 4; a++) {
+        if (Math.random() > 0.55) continue;
+        const ang = (a / 4) * Math.PI * 2 + Math.random() * 0.3;
+        const r = topR + (baseR - topR) * (1 - y / baseH) + 0.02;
+        const win = new THREE.Mesh(
+          new THREE.BoxGeometry(0.28, 0.45, 0.1), winMat);
+        win.position.set(Math.cos(ang) * r, y, Math.sin(ang) * r);
+        win.rotation.y = ang;
+        t.add(win);
+      }
+    }
+    t.position.set(x, 0, 0);
+    return t;
+  }
+
+  // Главный «корпус» замка
+  const hall = new THREE.Mesh(
+    new THREE.BoxGeometry(34, 8, 6), stoneMat);
+  hall.position.set(0, 4, 0); skyline.add(hall);
+  const hallRoof = new THREE.Mesh(
+    new THREE.BoxGeometry(34.4, 0.6, 6.4), roofMat);
+  hallRoof.position.set(0, 8.3, 0); skyline.add(hallRoof);
+  // Длинный ряд светящихся окон главного зала
+  for (let i = 0; i < 11; i++) {
+    const win = new THREE.Mesh(
+      new THREE.BoxGeometry(0.55, 1.4, 0.1), winMat);
+    win.position.set(-14 + i * 2.8, 4.1, 3.05); skyline.add(win);
+  }
+
+  // Башни разной высоты вокруг главного корпуса
+  const towers = [
+    [-14, 1.5, 14, 1.2, 4.5],
+    [-9,  1.7, 19, 1.3, 5.5],
+    [-4,  2.0, 26, 1.5, 7],
+    [1,   1.8, 22, 1.4, 6],
+    [6,   2.2, 30, 1.6, 8],   // главная астрономическая башня
+    [11,  1.6, 18, 1.2, 5],
+    [16,  1.4, 14, 1.1, 4.5],
+  ];
+  for (const [x, br, bh, tr, sh] of towers) {
+    skyline.add(makeTower(x, br, bh, tr, sh));
+  }
+
+  // Силуэт гор за замком (вершины с покрытием снега ловят лунный свет)
+  for (let i = 0; i < 7; i++) {
+    const h = 12 + Math.random() * 8;
+    const r = 7 + Math.random() * 4;
+    const m = new THREE.Mesh(
+      new THREE.ConeGeometry(r, h, 8),
+      new THREE.MeshStandardMaterial({ color: 0x2a3258, roughness: 1.0 }));
+    m.position.set(-32 + i * 10 + (Math.random() - 0.5) * 3, h / 2, -8);
+    skyline.add(m);
+    // Снежная шапка
+    const cap = new THREE.Mesh(
+      new THREE.ConeGeometry(r * 0.55, h * 0.32, 8),
+      new THREE.MeshStandardMaterial({ color: 0xe8ecf8, roughness: 0.9 }));
+    cap.position.set(m.position.x, h - h * 0.16, -8);
+    skyline.add(cap);
+  }
+
+  // Облачные «острова» вместо мрачного леса — гирлянды пушистых сфер
+  // на разных глубинах, чтобы передать ощущение полёта по небу.
+  const skyCloudMat = new THREE.MeshStandardMaterial({
+    color: 0xe6e6f5, roughness: 1.0,
+    emissive: 0x4a5290, emissiveIntensity: 0.15 });
+  for (let i = 0; i < 16; i++) {
+    const cluster = new THREE.Group();
+    const side = i < 8 ? -1 : 1;
+    const idx = i % 8;
+    for (let j = 0; j < 4; j++) {
+      const r = 1.0 + Math.random() * 1.2;
+      const puff = new THREE.Mesh(
+        new THREE.SphereGeometry(r, 10, 8), skyCloudMat);
+      puff.position.set(
+        (Math.random() - 0.5) * 2.4,
+        (Math.random() - 0.5) * 0.8,
+        (Math.random() - 0.5) * 1.4);
+      puff.scale.set(1, 0.7, 1);
+      cluster.add(puff);
+    }
+    cluster.position.set(
+      side * (14 + Math.random() * 16) + (Math.random() - 0.5) * 3,
+      6 + Math.random() * 12,
+      3 + idx * 0.6 + Math.random() * 3);
+    skyline.add(cluster);
+  }
+
+  return skyline;
+}
+
+// =============================================================
 // Шаблоны (player + collect + 3 препятствия + side-окружение)
 // =============================================================
 function buildTemplatesForCharacter(char) {
@@ -745,6 +1008,16 @@ function buildTemplatesForCharacter(char) {
     templates.obstacleMid = buildBarrier();
     templates.obstacleWide = buildCar();
     templates.side = [buildPalmTree, buildVilla, buildCactus];
+  } else if (char.theme === 'hogwarts') {
+    // Хогвартс — мальчик на метле летит по небу, золотые слитки,
+    // препятствия: магическая сфера (прыжок), высокое облако (подкат),
+    // грозовая туча (смена полосы).
+    templates.player = buildOsmanOnBroom();
+    templates.collect = buildGoldBar();
+    templates.obstacleLow = buildGlowingOrb();
+    templates.obstacleMid = buildHighCloud();
+    templates.obstacleWide = buildStormCloud();
+    templates.side = [buildHogwartsCandle, buildFloatingIsland, buildHogwartsTurret];
   } else {
     // Конфетный мир — общие препятствия и окружение
     templates.player = char.vehicle === 'cone' ? buildAnisaOnCone() : buildAklimaOnTable();
@@ -1295,6 +1568,225 @@ function buildAnisaOnCone() {
 }
 
 // =============================================================
+// Игрок: Осман — мальчик в тёмно-синем пиджаке на летающей метле.
+// Метла — горизонтальный деревянный стержень: ручка (грипп) спереди (-Z),
+// связка прутьев сзади (+Z). Мальчик сидит сверху, лицом по ходу (-Z),
+// руки впереди держат ручку. Габариты компактные — голова ≈ y 1.25.
+// =============================================================
+function buildOsmanOnBroom() {
+  const root = new THREE.Group();
+
+  // ---- Метла ----
+  const woodMat = new THREE.MeshStandardMaterial({ color: 0x6e4a26, roughness: 0.85 });
+  const woodDark = new THREE.MeshStandardMaterial({ color: 0x4a2f16, roughness: 0.9 });
+  const bindMat = new THREE.MeshStandardMaterial({ color: 0x2a1810, roughness: 0.8 });
+  const twigLight = new THREE.MeshStandardMaterial({ color: 0x9a7440, roughness: 1.0 });
+  const twigDark  = new THREE.MeshStandardMaterial({ color: 0x6a4820, roughness: 1.0 });
+
+  // Древко вдоль Z
+  const handle = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.07, 0.06, 1.7, 12), woodMat);
+  handle.rotation.x = Math.PI / 2;
+  handle.position.set(0, 0.32, 0.05);
+  root.add(handle);
+
+  // Передний скруглённый набалдашник (за -Z)
+  const knob = new THREE.Mesh(
+    new THREE.SphereGeometry(0.08, 12, 10), woodDark);
+  knob.position.set(0, 0.32, -0.85);
+  root.add(knob);
+
+  // Тёмная кожаная обвязка перед прутьями
+  const binding = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.105, 0.095, 0.14, 14), bindMat);
+  binding.rotation.x = Math.PI / 2;
+  binding.position.set(0, 0.32, 0.7);
+  root.add(binding);
+  // Узелок-ремешок поверх обвязки
+  const knot = new THREE.Mesh(
+    new THREE.SphereGeometry(0.035, 8, 6), bindMat);
+  knot.position.set(0.1, 0.4, 0.7);
+  root.add(knot);
+
+  // Прутья — расходящаяся «метёлка» назад (+Z)
+  for (let i = 0; i < 22; i++) {
+    const a = (i / 22) * Math.PI * 2;
+    const r0 = 0.04 + Math.random() * 0.05;
+    const len = 0.5 + Math.random() * 0.25;
+    const twig = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.014, 0.004, len, 5),
+      Math.random() < 0.5 ? twigLight : twigDark);
+    // Локально: цилиндр вдоль Y. Опускаем основание в обвязку, а кончик уезжает назад.
+    twig.position.set(
+      Math.cos(a) * r0,
+      0.32 + Math.sin(a) * r0,
+      0.78 + len * 0.5);
+    twig.rotation.x = Math.PI / 2;            // вдоль Z
+    twig.rotation.y = -Math.cos(a) * (0.25 + Math.random() * 0.18);
+    twig.rotation.z = -Math.sin(a) * (0.25 + Math.random() * 0.18);
+    root.add(twig);
+  }
+  // Несколько коротких пучков-«хохолков» по самому концу для объёма
+  for (let i = 0; i < 8; i++) {
+    const tip = new THREE.Mesh(
+      new THREE.SphereGeometry(0.04 + Math.random() * 0.02, 6, 5),
+      Math.random() < 0.5 ? twigLight : twigDark);
+    tip.position.set(
+      (Math.random() - 0.5) * 0.22,
+      0.32 + (Math.random() - 0.5) * 0.22,
+      1.18 + Math.random() * 0.12);
+    root.add(tip);
+  }
+
+  // ---- Мальчик (СИДИТ на метле, лицом в -Z) ----
+  const boy = new THREE.Group();
+  const skinMat   = new THREE.MeshStandardMaterial({ color: 0xf2c79b, roughness: 0.85 });
+  const jacketMat = new THREE.MeshStandardMaterial({ color: 0x1a2548, roughness: 0.75 });
+  const shirtMat  = new THREE.MeshStandardMaterial({ color: 0xfff8e8, roughness: 0.7 });
+  const pantsMat  = new THREE.MeshStandardMaterial({ color: 0x1a2548, roughness: 0.85 });
+  const hairMat   = new THREE.MeshStandardMaterial({ color: 0x2a1810, roughness: 0.95 });
+  const shoeMat   = new THREE.MeshStandardMaterial({ color: 0x14182a, roughness: 0.85 });
+  const lipMat    = new THREE.MeshStandardMaterial({ color: 0xc24a4a });
+
+  // Бёдра — на ручке, чуть смещены назад
+  const hips = new THREE.Mesh(new THREE.SphereGeometry(0.2, 14, 10), pantsMat);
+  hips.scale.set(1.1, 0.7, 0.95);
+  hips.position.set(0, 0.5, 0.05);
+  boy.add(hips);
+
+  // Торс — пиджак
+  const torso = new THREE.Mesh(new THREE.SphereGeometry(0.24, 14, 12), jacketMat);
+  torso.scale.set(1.0, 1.15, 0.85);
+  torso.position.set(0, 0.78, -0.02);
+  boy.add(torso);
+
+  // Лацканы пиджака (две тёмные капли по сторонам груди)
+  for (const sx of [-1, 1]) {
+    const lap = new THREE.Mesh(new THREE.SphereGeometry(0.07, 10, 8),
+      new THREE.MeshStandardMaterial({ color: 0x10182f, roughness: 0.75 }));
+    lap.scale.set(0.4, 1.2, 0.25);
+    lap.position.set(sx * 0.08, 0.82, -0.21);
+    lap.rotation.z = sx * 0.2;
+    boy.add(lap);
+  }
+
+  // Белая футболка треугольником у горла
+  const shirtV = new THREE.Mesh(new THREE.SphereGeometry(0.085, 10, 8), shirtMat);
+  shirtV.scale.set(1, 1.15, 0.3);
+  shirtV.position.set(0, 0.95, -0.22);
+  boy.add(shirtV);
+
+  // Шея
+  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.06, 0.08, 10), skinMat);
+  neck.position.set(0, 1.05, -0.02);
+  boy.add(neck);
+
+  // Голова
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.21, 18, 14), skinMat);
+  head.scale.set(1.0, 1.05, 1.0);
+  head.position.set(0, 1.24, -0.02);
+  boy.add(head);
+
+  // Светлые волосы — короткая «ёжиком» причёска
+  const hairTop = new THREE.Mesh(new THREE.SphereGeometry(0.215, 16, 12), hairMat);
+  hairTop.scale.set(1.05, 0.6, 1.05);
+  hairTop.position.set(0, 1.36, -0.04);
+  boy.add(hairTop);
+  // Лёгкие «иголочки» сверху для эффекта взъерошенности
+  for (let i = 0; i < 5; i++) {
+    const spike = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.1, 5), hairMat);
+    spike.position.set(
+      (Math.random() - 0.5) * 0.22,
+      1.45 + Math.random() * 0.03,
+      -0.06 + (Math.random() - 0.5) * 0.15);
+    spike.rotation.z = (Math.random() - 0.5) * 0.4;
+    boy.add(spike);
+  }
+  // Чёлка
+  const bangs = new THREE.Mesh(new THREE.SphereGeometry(0.13, 12, 10), hairMat);
+  bangs.scale.set(1.45, 0.35, 0.55);
+  bangs.position.set(0, 1.32, -0.17);
+  boy.add(bangs);
+  // Височные пряди
+  for (const sx of [-1, 1]) {
+    const side = new THREE.Mesh(new THREE.SphereGeometry(0.1, 10, 8), hairMat);
+    side.scale.set(0.55, 0.7, 0.65);
+    side.position.set(sx * 0.18, 1.28, -0.04);
+    boy.add(side);
+  }
+
+  // Глаза
+  for (const sx of [-1, 1]) {
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.024, 8, 6),
+      new THREE.MeshStandardMaterial({ color: 0x1a0e08 }));
+    eye.position.set(sx * 0.065, 1.25, -0.22);
+    boy.add(eye);
+  }
+
+  // Лёгкая улыбка
+  const smile = new THREE.Mesh(
+    new THREE.TorusGeometry(0.05, 0.01, 6, 12, Math.PI), lipMat);
+  smile.rotation.x = Math.PI;
+  smile.position.set(0, 1.16, -0.23);
+  boy.add(smile);
+
+  // Руки — обе вытянуты вперёд, держат ручку метлы
+  for (const sx of [-1, 1]) {
+    const upperArm = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.06, 0.05, 0.3, 10), jacketMat);
+    upperArm.position.set(sx * 0.22, 0.78, -0.16);
+    upperArm.rotation.z = sx * 0.3;
+    upperArm.rotation.x = -0.9;
+    boy.add(upperArm);
+    // Манжет рубашки выглядывает из рукава
+    const cuff = new THREE.Mesh(
+      new THREE.TorusGeometry(0.062, 0.012, 4, 12), shirtMat);
+    cuff.position.set(sx * 0.18, 0.55, -0.3);
+    cuff.rotation.z = sx * 0.3;
+    cuff.rotation.y = Math.PI / 2;
+    boy.add(cuff);
+    // Кисть, обхватывающая ручку
+    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.055, 10, 8), skinMat);
+    hand.position.set(sx * 0.1, 0.4, -0.4);
+    boy.add(hand);
+  }
+
+  // Ноги — свисают по обеим сторонам метлы
+  for (const sx of [-1, 1]) {
+    const thigh = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.08, 0.07, 0.36, 10), pantsMat);
+    thigh.position.set(sx * 0.15, 0.34, 0.0);
+    thigh.rotation.z = sx * 0.12;
+    thigh.rotation.x = -0.25;
+    boy.add(thigh);
+    const knee = new THREE.Mesh(new THREE.SphereGeometry(0.07, 10, 8), pantsMat);
+    knee.position.set(sx * 0.19, 0.17, 0.07);
+    boy.add(knee);
+    const shin = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.06, 0.055, 0.4, 10), pantsMat);
+    shin.position.set(sx * 0.21, -0.02, 0.1);
+    shin.rotation.z = sx * 0.06;
+    shin.rotation.x = -0.08;
+    boy.add(shin);
+    // Ботинок (тёмно-синий, низкий)
+    const shoe = new THREE.Mesh(new THREE.SphereGeometry(0.085, 10, 8), shoeMat);
+    shoe.scale.set(1, 0.55, 1.4);
+    shoe.position.set(sx * 0.21, -0.23, 0.16);
+    boy.add(shoe);
+    // Подошва — чуть светлее
+    const sole = new THREE.Mesh(
+      new THREE.BoxGeometry(0.13, 0.02, 0.22),
+      new THREE.MeshStandardMaterial({ color: 0xeae3d4, roughness: 0.7 }));
+    sole.position.set(sx * 0.21, -0.28, 0.16);
+    boy.add(sole);
+  }
+
+  root.add(boy);
+  root.userData.hover = true;
+  return root;
+}
+
+// =============================================================
 // Собираемые: апельсин (Мухаммад), долька арбуза (Аклима), эскимо (Аниса)
 // =============================================================
 function buildOrange() {
@@ -1422,6 +1914,52 @@ function buildEskimo() {
   esk.add(stickTip);
 
   return esk;
+}
+
+// Собираемый Османа — золотой слиток (трапеция со скосом)
+function buildGoldBar() {
+  const bar = new THREE.Group();
+  const goldMat = new THREE.MeshStandardMaterial({
+    color: 0xf4c850, roughness: 0.28, metalness: 0.85,
+    emissive: 0x5a3e08, emissiveIntensity: 0.28,
+  });
+  const goldHi = new THREE.MeshStandardMaterial({
+    color: 0xfff0b0, roughness: 0.22, metalness: 0.9,
+  });
+
+  // Корпус — трапециевидная призма (узкий верх, широкое основание)
+  const shape = new THREE.Shape();
+  shape.moveTo(-0.34, -0.10);
+  shape.lineTo(0.34, -0.10);
+  shape.lineTo(0.27, 0.10);
+  shape.lineTo(-0.27, 0.10);
+  shape.lineTo(-0.34, -0.10);
+  const body = new THREE.Mesh(
+    new THREE.ExtrudeGeometry(shape, {
+      depth: 0.18, bevelEnabled: true,
+      bevelSize: 0.02, bevelThickness: 0.018, bevelSegments: 2,
+    }),
+    goldMat);
+  body.position.z = -0.09;
+  bar.add(body);
+
+  // Светлая «фаска» на верхнем ребре
+  const shineTop = new THREE.Mesh(
+    new THREE.BoxGeometry(0.42, 0.014, 0.14), goldHi);
+  shineTop.position.set(0, 0.105, 0); bar.add(shineTop);
+  // Светлая линия по переднему ребру
+  const shineFront = new THREE.Mesh(
+    new THREE.BoxGeometry(0.48, 0.018, 0.012), goldHi);
+  shineFront.position.set(0, 0.0, 0.1); bar.add(shineFront);
+  // Тонкое клеймо на верхней грани (тёмная точка-печать)
+  const stamp = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.04, 0.04, 0.005, 12),
+    new THREE.MeshStandardMaterial({
+      color: 0x8a5a10, roughness: 0.6, metalness: 0.5 }));
+  stamp.position.set(0, 0.112, 0);
+  bar.add(stamp);
+
+  return bar;
 }
 
 // =============================================================
@@ -1584,6 +2122,181 @@ function buildCake() {
 }
 
 // =============================================================
+// Препятствия Хогвартса: светящаяся магическая сфера, высокое облако, грозовая туча
+// =============================================================
+function buildGlowingOrb() {
+  // Препятствие «прыжок» (hb h=1.0): магическая светящаяся сфера в воздухе.
+  // Аналог конуса у Мухаммеда — низкое и компактное.
+  const g = new THREE.Group();
+
+  // Внешний мягкий ореол
+  const halo = new THREE.Mesh(
+    new THREE.SphereGeometry(0.46, 16, 12),
+    new THREE.MeshBasicMaterial({
+      color: 0xc8e6ff, transparent: true, opacity: 0.22 }));
+  halo.position.y = 0.55; g.add(halo);
+
+  // Средний слой свечения
+  const glow = new THREE.Mesh(
+    new THREE.SphereGeometry(0.36, 16, 12),
+    new THREE.MeshBasicMaterial({
+      color: 0x80b8ff, transparent: true, opacity: 0.4 }));
+  glow.position.y = 0.55; g.add(glow);
+
+  // Сердцевина сферы — сильно эмиссивная (выглядит как лампа)
+  const core = new THREE.Mesh(
+    new THREE.SphereGeometry(0.26, 20, 16),
+    new THREE.MeshStandardMaterial({
+      color: 0xeaf4ff,
+      emissive: 0x6aa8ff, emissiveIntensity: 2.2,
+      roughness: 0.25,
+    }));
+  core.position.y = 0.55; g.add(core);
+
+  // Яркая «лампочка» внутри для контраста
+  const spark = new THREE.Mesh(
+    new THREE.SphereGeometry(0.1, 12, 10),
+    new THREE.MeshBasicMaterial({ color: 0xffffff }));
+  spark.position.y = 0.55; g.add(spark);
+
+  // Хороводящие искорки на орбите вокруг центра
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    const r = 0.4;
+    const sp = new THREE.Mesh(
+      new THREE.SphereGeometry(0.025 + Math.random() * 0.012, 6, 5),
+      new THREE.MeshBasicMaterial({ color: 0xfff8e0 }));
+    sp.position.set(
+      Math.cos(a) * r,
+      0.55 + Math.sin(a) * 0.08,
+      Math.sin(a) * r * 0.4);
+    g.add(sp);
+  }
+
+  // Тонкое экваториальное кольцо — добавляет «магичности»
+  const ring = new THREE.Mesh(
+    new THREE.TorusGeometry(0.38, 0.012, 6, 32),
+    new THREE.MeshBasicMaterial({ color: 0xfff8c0, transparent: true, opacity: 0.75 }));
+  ring.position.y = 0.55;
+  ring.rotation.x = Math.PI / 2;
+  g.add(ring);
+
+  return g;
+}
+
+function buildHighCloud() {
+  // Препятствие «подкат» (hb yMin=1.55, h=0.5, w=2.0): пухлое облако,
+  // нависающее на уровне головы — нужно пригнуться/подкатиться.
+  const g = new THREE.Group();
+
+  const cloudMat = new THREE.MeshStandardMaterial({
+    color: 0xf6f0ff, roughness: 1.0,
+    emissive: 0x8088c0, emissiveIntensity: 0.22 });
+  const cloudHi = new THREE.MeshStandardMaterial({
+    color: 0xffffff, roughness: 0.9,
+    emissive: 0xc0c8e8, emissiveIntensity: 0.3 });
+
+  // Кластер мягких сфер, тянется по X — занимает ~2 единиц ширины
+  const positions = [
+    [-0.9, 1.75, 0.0],
+    [-0.5, 1.92, 0.08],
+    [-0.15, 1.85, -0.05],
+    [0.25, 1.95, 0.05],
+    [0.6, 1.88, -0.05],
+    [0.9, 1.78, 0.05],
+    [-0.7, 2.02, -0.08],
+    [0.1, 2.0, -0.1],
+    [0.75, 2.0, -0.08],
+  ];
+  for (const [x, y, z] of positions) {
+    const r = 0.26 + Math.random() * 0.1;
+    const puff = new THREE.Mesh(
+      new THREE.SphereGeometry(r, 14, 10),
+      Math.random() < 0.3 ? cloudHi : cloudMat);
+    puff.position.set(x, y, z);
+    puff.scale.y = 0.75;
+    g.add(puff);
+  }
+
+  // Лёгкие «дождинки» искорками под облаком — чтобы было ясно, что это нависает
+  for (let i = 0; i < 5; i++) {
+    const sparkle = new THREE.Mesh(
+      new THREE.SphereGeometry(0.022, 6, 5),
+      new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85 }));
+    sparkle.position.set(-0.8 + i * 0.4, 1.55 + Math.random() * 0.05, 0.06);
+    g.add(sparkle);
+  }
+
+  return g;
+}
+
+function buildStormCloud() {
+  // Препятствие «менять полосу» (hb w=1.7, h=1.5, d=3.0): тёмная грозовая туча с молнией
+  const g = new THREE.Group();
+  const cloudMat = new THREE.MeshStandardMaterial({
+    color: 0x3a3850, roughness: 1.0,
+    emissive: 0x1a1838, emissiveIntensity: 0.35 });
+  const cloudHi = new THREE.MeshStandardMaterial({
+    color: 0x5a5878, roughness: 1.0 });
+
+  // Кластер сфер — тело тучи в верхней половине hitbox (y 0.9..1.5)
+  const cloudPos = [
+    [-0.65, 1.15, -1.0], [0.0, 1.32, -0.85],
+    [0.6,  1.18, -0.95], [-0.3, 1.4, -0.2],
+    [0.35, 1.4, 0.2],    [-0.55, 1.1, 1.0],
+    [0.1,  1.25, 1.0],   [0.55, 1.0, 0.75],
+    [-0.75, 1.2, 0.25],
+  ];
+  for (const [x, y, z] of cloudPos) {
+    const s = new THREE.Mesh(
+      new THREE.SphereGeometry(0.58, 12, 10),
+      Math.random() < 0.3 ? cloudHi : cloudMat);
+    s.position.set(x, y, z);
+    s.scale.setScalar(0.85 + Math.random() * 0.35);
+    g.add(s);
+  }
+
+  // Молния — зигзаг из светящихся «брусков» под тучей (y 0.0..0.95)
+  const boltMat = new THREE.MeshBasicMaterial({ color: 0xfff080 });
+  const boltSeg = [
+    [0.0,  0.92,  0.1,  0.6],
+    [0.1,  0.6,  -0.18, 0.28],
+    [-0.18, 0.28, 0.05, -0.0],
+    [0.05, -0.0, -0.1,  -0.3],
+  ];
+  for (const [x0, y0, x1, y1] of boltSeg) {
+    const len = Math.hypot(x1 - x0, y1 - y0);
+    const ang = Math.atan2(y1 - y0, x1 - x0);
+    const seg = new THREE.Mesh(
+      new THREE.BoxGeometry(len, 0.07, 0.04), boltMat);
+    seg.position.set((x0 + x1) / 2, (y0 + y1) / 2, 0);
+    seg.rotation.z = ang;
+    g.add(seg);
+  }
+  // Сияющий ореол вокруг молнии
+  const halo = new THREE.Mesh(
+    new THREE.SphereGeometry(0.45, 12, 10),
+    new THREE.MeshBasicMaterial({
+      color: 0xfff080, transparent: true, opacity: 0.28 }));
+  halo.position.set(0, 0.4, 0); g.add(halo);
+
+  // Дождевые штрихи (несколько вертикальных капель)
+  const rainMat = new THREE.MeshBasicMaterial({
+    color: 0x9ab6e0, transparent: true, opacity: 0.55 });
+  for (let i = 0; i < 10; i++) {
+    const r = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.012, 0.012, 0.35, 5), rainMat);
+    r.position.set(
+      -0.75 + Math.random() * 1.5,
+      0.55 + Math.random() * 0.3,
+      -1.1 + Math.random() * 2.2);
+    g.add(r);
+  }
+
+  return g;
+}
+
+// =============================================================
 // Боковая среда: Дубай (пальма / вилла / кактус)
 // =============================================================
 function buildPalmTree() {
@@ -1706,6 +2419,133 @@ function buildCottonCandyBush() {
 }
 
 // =============================================================
+// Боковая среда: Хогвартс (парящая свеча / гнутое дерево / башенка)
+// =============================================================
+function buildHogwartsCandle() {
+  const g = new THREE.Group();
+  const waxMat = new THREE.MeshStandardMaterial({ color: 0xf4e4c4, roughness: 0.7 });
+  const flameMat = new THREE.MeshStandardMaterial({
+    color: 0xffc070, emissive: 0xff8a20, emissiveIntensity: 1.9,
+    transparent: true, opacity: 0.9 });
+  // Кластер из 3-4 парящих свечей на разной высоте
+  const n = 3 + Math.floor(Math.random() * 2);
+  for (let i = 0; i < n; i++) {
+    const x = (Math.random() - 0.5) * 0.7;
+    const z = (Math.random() - 0.5) * 0.6;
+    const y = 1.3 + i * 0.6 + Math.random() * 0.3;
+    const candle = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.09, 0.1, 0.6, 12), waxMat);
+    candle.position.set(x, y, z); g.add(candle);
+    const flame = new THREE.Mesh(new THREE.SphereGeometry(0.06, 10, 8), flameMat);
+    flame.scale.set(1, 1.8, 1);
+    flame.position.set(x, y + 0.38, z); g.add(flame);
+    const halo = new THREE.Mesh(
+      new THREE.SphereGeometry(0.13, 10, 8),
+      new THREE.MeshBasicMaterial({
+        color: 0xffc070, transparent: true, opacity: 0.22 }));
+    halo.position.set(x, y + 0.38, z); g.add(halo);
+  }
+  return g;
+}
+
+function buildFloatingIsland() {
+  // Парящий скальный обломок с мини-башенкой — заменяет дерево,
+  // потому что мы летим в небе и наземные деревья не вяжутся
+  const g = new THREE.Group();
+  const rockMat  = new THREE.MeshStandardMaterial({ color: 0x4a4868, roughness: 0.95 });
+  const grassMat = new THREE.MeshStandardMaterial({ color: 0x3a5e6e, roughness: 1.0 });
+  const stoneMat = new THREE.MeshStandardMaterial({ color: 0x4a4868, roughness: 0.9 });
+  const roofMat  = new THREE.MeshStandardMaterial({ color: 0x2a2848, roughness: 0.85 });
+  const winMat   = new THREE.MeshStandardMaterial({
+    color: 0xffd070, emissive: 0xffa040, emissiveIntensity: 1.4 });
+
+  // Скальное основание — конус остриём вниз
+  const rock = new THREE.Mesh(
+    new THREE.ConeGeometry(1.05, 1.8, 8), rockMat);
+  rock.position.y = 1.6; rock.rotation.x = Math.PI;
+  g.add(rock);
+  // Травянистая «шапка» сверху
+  const cap = new THREE.Mesh(
+    new THREE.CylinderGeometry(1.1, 0.95, 0.32, 12), grassMat);
+  cap.position.y = 2.6; g.add(cap);
+  // Мини-башенка на острове
+  const towerBody = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.32, 0.42, 1.4, 10), stoneMat);
+  towerBody.position.y = 3.45; g.add(towerBody);
+  // Шпиль
+  const spire = new THREE.Mesh(
+    new THREE.ConeGeometry(0.45, 0.9, 10), roofMat);
+  spire.position.y = 4.6; g.add(spire);
+  // Светящееся окно
+  const win = new THREE.Mesh(
+    new THREE.BoxGeometry(0.18, 0.28, 0.1), winMat);
+  win.position.set(0, 3.45, 0.4); g.add(win);
+
+  // Отколовшиеся камешки парят под основанием
+  for (let i = 0; i < 5; i++) {
+    const bit = new THREE.Mesh(
+      new THREE.SphereGeometry(0.14 + Math.random() * 0.1, 8, 6), rockMat);
+    bit.position.set(
+      (Math.random() - 0.5) * 1.1,
+      0.2 + Math.random() * 0.7,
+      (Math.random() - 0.5) * 1.1);
+    g.add(bit);
+  }
+  return g;
+}
+
+function buildHogwartsTurret() {
+  // Парящая башня — каменный шпиль на пухлой облачной подушке
+  const g = new THREE.Group();
+  const stoneMat = new THREE.MeshStandardMaterial({ color: 0x4a4868, roughness: 0.9 });
+  const roofMat  = new THREE.MeshStandardMaterial({ color: 0x2a2848, roughness: 0.85 });
+  const winMat   = new THREE.MeshStandardMaterial({
+    color: 0xffd070, emissive: 0xffa040, emissiveIntensity: 1.4 });
+  const cloudMat = new THREE.MeshStandardMaterial({
+    color: 0xe6e6f5, roughness: 1.0,
+    emissive: 0x4a5290, emissiveIntensity: 0.18 });
+
+  // Облачная подушка-основание (видно, что башня парит)
+  for (let i = 0; i < 7; i++) {
+    const r = 0.5 + Math.random() * 0.4;
+    const puff = new THREE.Mesh(new THREE.SphereGeometry(r, 10, 8), cloudMat);
+    puff.position.set(
+      (Math.random() - 0.5) * 1.4,
+      0.4 + Math.random() * 0.3,
+      (Math.random() - 0.5) * 1.4);
+    puff.scale.y = 0.6;
+    g.add(puff);
+  }
+
+  const baseY = 1.0;
+  const h = 3.4 + Math.random() * 1.6;
+  const body = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.7, 0.9, h, 10), stoneMat);
+  body.position.y = baseY + h / 2; g.add(body);
+  // Зубчатый венец под крышу
+  const crown = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.78, 0.78, 0.22, 10), stoneMat);
+  crown.position.y = baseY + h + 0.11; g.add(crown);
+  // Шпиль
+  const spire = new THREE.Mesh(
+    new THREE.ConeGeometry(0.85, 1.6, 10), roofMat);
+  spire.position.y = baseY + h + 1.02; g.add(spire);
+  // Окошки
+  for (let i = 0; i < 2; i++) {
+    const win = new THREE.Mesh(
+      new THREE.BoxGeometry(0.26, 0.42, 0.1), winMat);
+    win.position.set(0, baseY + 1.1 + i * 1.4, 0.82);
+    g.add(win);
+    const win2 = new THREE.Mesh(
+      new THREE.BoxGeometry(0.26, 0.42, 0.1), winMat);
+    win2.position.set(0.82, baseY + 1.1 + i * 1.4, 0);
+    win2.rotation.y = Math.PI / 2;
+    g.add(win2);
+  }
+  return g;
+}
+
+// =============================================================
 // Игрок: общая обёртка (кладёт модель в holder + создаёт тень)
 // =============================================================
 function buildPlayer(char) {
@@ -1717,7 +2557,11 @@ function buildPlayer(char) {
   player.userData.hover = !!templates.player.userData.hover;
   player.userData.char = char.id;
 
-  const shadowColor = char.theme === 'dubai' ? 0x2a1a0a : 0xc06080;
+  const shadowColor = char.theme === 'dubai'
+    ? 0x2a1a0a
+    : char.theme === 'hogwarts'
+      ? 0x0a1230
+      : 0xc06080;
   const shadow = new THREE.Mesh(
     new THREE.CircleGeometry(0.95, 24),
     new THREE.MeshBasicMaterial({ color: shadowColor, transparent: true, opacity: 0.32 }));
@@ -1735,8 +2579,10 @@ function buildPlayer(char) {
 // Частицы при сборе предмета
 // =============================================================
 function spawnPickupParticles(x, y, z) {
-  const baseColor = currentCharacter && currentCharacter.theme === 'dubai'
-    ? 0xffa840 : 0xff8aaa;
+  const theme = currentCharacter && currentCharacter.theme;
+  const baseColor = theme === 'dubai' ? 0xffa840
+                  : theme === 'hogwarts' ? 0xffd860
+                  : 0xff8aaa;
   const mat = new THREE.MeshBasicMaterial({ color: baseColor, transparent: true, opacity: 1 });
   const geo = new THREE.SphereGeometry(0.08, 6, 5);
   for (let i = 0; i < 7; i++) {
