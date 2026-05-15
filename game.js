@@ -2,7 +2,9 @@
 // Мелкие в мире чудес — мульти-персонажный 3D-раннер на Three.js
 // Один файл логики, без сборки. Игроки: Мухаммад (Дубай-капибара),
 // Аклима (стол-летун в конфетном мире), Аниса (рожок мороженого),
-// Осман (мальчик на метле в небе у Хогвартса, собирает золотые слитки).
+// Осман (мальчик на метле в небе у Хогвартса, собирает золотые слитки),
+// Абдулла & Арслан (двое в красном Mercedes-кабриолете по Стамбулу,
+// режим только-смена-полосы, собирают пачки денег).
 // Каждый персонаж задаёт собственное небо, землю, скайлайн, модель,
 // собираемый предмет и три типа препятствий.
 // =============================================================
@@ -162,7 +164,15 @@ const CHARACTERS = {
     },
     collect: { icon: '🪙' },
   },
-  arslan_abdulla: { id: 'arslan_abdulla', name: 'Арслан и Абдулла', locked: true },
+  arslan_abdulla: {
+    id: 'arslan_abdulla', name: 'Абдулла и Арслан',
+    locked: false, bestKey: 'best_arslan_abdulla', theme: 'istanbul',
+    mode: 'lanes-only',
+    audio: {
+      bg: 'Characters/Абдулла и Арслан/Abdulla&Arslan_mainsound.mp3',
+    },
+    collect: { icon: '💵' },
+  },
 };
 const CHARACTER_ORDER = ['muhammad', 'aklima', 'anisa', 'osman', 'arslan_abdulla'];
 
@@ -288,6 +298,9 @@ function applyCharacter(char) {
   } else if (char.theme === 'hogwarts') {
     scene.background = new THREE.Color(0x2c3360);
     scene.fog = new THREE.Fog(0x3a4078, 60, 150);
+  } else if (char.theme === 'istanbul') {
+    scene.background = new THREE.Color(0xb8d8f0);
+    scene.fog = new THREE.Fog(0xcce0ee, 55, 145);
   } else {
     scene.background = new THREE.Color(0xffd0e8);
     scene.fog = new THREE.Fog(0xfddbe9, 50, 140);
@@ -300,6 +313,9 @@ function applyCharacter(char) {
   } else if (char.theme === 'hogwarts') {
     themeRefs.groundMeshes = buildHogwartsPath();
     themeRefs.skylineGroup = buildHogwartsSkyline();
+  } else if (char.theme === 'istanbul') {
+    themeRefs.groundMeshes = buildIstanbulHighway();
+    themeRefs.skylineGroup = buildIstanbulSkyline();
   } else {
     themeRefs.groundMeshes = buildCandyPath();
     themeRefs.skylineGroup = buildCandySkyline();
@@ -363,6 +379,17 @@ function buildLights(char) {
     const windowRim = new THREE.DirectionalLight(0xffc080, 0.6);
     windowRim.position.set(-8, 4, -15);
     scene.add(windowRim); themeRefs.lights.push(windowRim);
+  } else if (char.theme === 'istanbul') {
+    // Стамбул: ясный солнечный день у Босфора. Тёплый sun сверху,
+    // прохладный hemi от моря, прохладный «отражённый» rim от стекла зданий.
+    const sun = new THREE.DirectionalLight(0xfff2d6, 1.4);
+    sun.position.set(-10, 18, -8);
+    scene.add(sun); themeRefs.lights.push(sun);
+    const hemi = new THREE.HemisphereLight(0xb8d8f0, 0x9ab098, 1.0);
+    scene.add(hemi); themeRefs.lights.push(hemi);
+    const seaRim = new THREE.DirectionalLight(0x9ac0e8, 0.5);
+    seaRim.position.set(10, 4, 6);
+    scene.add(seaRim); themeRefs.lights.push(seaRim);
   } else {
     // Конфетный мир: мягкий розовый свет, бирюзовый «контр» от облаков
     const sun = new THREE.DirectionalLight(0xfff4e0, 1.1);
@@ -385,6 +412,8 @@ function buildSky(char) {
     ? { top: 0x6fb6ff, mid: 0xffb265, bottom: 0xffe0a0 }
     : char.theme === 'hogwarts'
     ? { top: 0x1a2658, mid: 0x4a3e80, bottom: 0x7a6ab0 }
+    : char.theme === 'istanbul'
+    ? { top: 0x3a82be, mid: 0x8ec0e0, bottom: 0xe6f0f6 }
     : { top: 0xfde0eb, mid: 0xffc8d8, bottom: 0xfff5f1 };
   const skyMat = new THREE.ShaderMaterial({
     side: THREE.BackSide,
@@ -659,6 +688,93 @@ function buildHogwartsPath() {
   mist.rotation.x = -Math.PI / 2;
   mist.position.y = -0.04;
   scene.add(mist); refs.push(mist);
+
+  return refs;
+}
+
+// =============================================================
+// Шоссе по набережной Стамбула (Абдулла и Арслан) —
+// современный асфальт с пунктирной разметкой, бетонные обочины,
+// слева — синяя гладь Босфора, справа — зелёная парковая полоса
+// =============================================================
+function buildIstanbulHighway() {
+  const refs = [];
+  const c = document.createElement('canvas');
+  c.width = 256; c.height = 1024;
+  const g = c.getContext('2d');
+
+  // Свежий тёмно-серый асфальт чуть светлее дубайского
+  g.fillStyle = '#3a3e46'; g.fillRect(0, 0, c.width, c.height);
+  for (let i = 0; i < 5500; i++) {
+    const x = Math.random() * c.width, y = Math.random() * c.height;
+    const r = 0.5 + Math.random() * 1.4, v = Math.random();
+    g.fillStyle = v < 0.4 ? 'rgba(70,72,78,0.55)'
+              : v < 0.75 ? 'rgba(95,100,108,0.42)'
+                         : 'rgba(130,134,140,0.3)';
+    g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
+  }
+  // Лёгкие масляные пятна / следы шин
+  for (let i = 0; i < 18; i++) {
+    g.fillStyle = `rgba(15,15,18,${0.10 + Math.random() * 0.16})`;
+    g.beginPath();
+    g.ellipse(Math.random() * c.width, Math.random() * c.height,
+      6 + Math.random() * 22, 2 + Math.random() * 8,
+      Math.random() * Math.PI, 0, Math.PI * 2);
+    g.fill();
+  }
+  drawRoadLines(g, c.width, c.height, '#f4f6fa');
+
+  groundTexture = new THREE.CanvasTexture(c);
+  groundTexture.colorSpace = THREE.SRGBColorSpace;
+  groundTexture.wrapS = THREE.ClampToEdgeWrapping;
+  groundTexture.wrapT = THREE.RepeatWrapping;
+  groundTexture.repeat.set(1, 50);
+  groundTexture.anisotropy = 8;
+
+  const road = new THREE.Mesh(
+    new THREE.PlaneGeometry(8, 400),
+    new THREE.MeshStandardMaterial({ map: groundTexture, roughness: 0.85, color: 0xffffff }));
+  road.rotation.x = -Math.PI / 2;
+  scene.add(road); refs.push(road);
+
+  // Бетонные обочины-бордюр
+  const curbMat = new THREE.MeshStandardMaterial({ color: 0xc0c4cc, roughness: 0.85 });
+  for (const sx of [-4.5, 4.5]) {
+    const sh = new THREE.Mesh(new THREE.PlaneGeometry(1.0, 400), curbMat);
+    sh.rotation.x = -Math.PI / 2;
+    sh.position.set(sx, -0.005, 0);
+    scene.add(sh); refs.push(sh);
+  }
+
+  // Слева (sx = -1) — синяя гладь Босфора с мягким переливом
+  const seaMat = new THREE.MeshStandardMaterial({
+    color: 0x3a86b8, roughness: 0.5, metalness: 0.1,
+    emissive: 0x1a4a6a, emissiveIntensity: 0.15 });
+  const sea = new THREE.Mesh(new THREE.PlaneGeometry(80, 400), seaMat);
+  sea.rotation.x = -Math.PI / 2;
+  sea.position.set(-45, -0.06, 0);
+  scene.add(sea); refs.push(sea);
+  // Светлая «пенная» полоса вдоль набережной
+  const foam = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.8, 400),
+    new THREE.MeshStandardMaterial({ color: 0xd8e8f4, roughness: 0.7 }));
+  foam.rotation.x = -Math.PI / 2;
+  foam.position.set(-5.45, -0.02, 0);
+  scene.add(foam); refs.push(foam);
+
+  // Справа (sx = +1) — зелёная парковая лужайка
+  const grassMat = new THREE.MeshStandardMaterial({ color: 0x6a9658, roughness: 1.0 });
+  const grass = new THREE.Mesh(new THREE.PlaneGeometry(80, 400), grassMat);
+  grass.rotation.x = -Math.PI / 2;
+  grass.position.set(45, -0.06, 0);
+  scene.add(grass); refs.push(grass);
+  // Бордюрная плитка между обочиной и газоном
+  const tile = new THREE.Mesh(
+    new THREE.PlaneGeometry(1.2, 400),
+    new THREE.MeshStandardMaterial({ color: 0xd4d8de, roughness: 0.85 }));
+  tile.rotation.x = -Math.PI / 2;
+  tile.position.set(5.6, -0.02, 0);
+  scene.add(tile); refs.push(tile);
 
   return refs;
 }
@@ -998,6 +1114,145 @@ function buildHogwartsSkyline() {
 }
 
 // =============================================================
+// Скайлайн: Стамбул (Абдулла и Арслан) — современные жилые башни,
+// мечеть с куполом и двумя минаретами, силуэт босфорского моста
+// =============================================================
+function buildIstanbulSkyline() {
+  const skyline = new THREE.Group();
+  skyline.position.set(0, 0, -110);
+
+  // Современные жилые башни — стекло/бетон, разной высоты, тонкие пропорции
+  const glassMat = (color, metalness = 0.55, roughness = 0.35) =>
+    new THREE.MeshStandardMaterial({ color, metalness, roughness });
+  const concreteMat = new THREE.MeshStandardMaterial({ color: 0xe8e4dc, roughness: 0.85 });
+
+  // Левый кластер (за морем)
+  for (let i = 0; i < 9; i++) {
+    const w = 2.4 + Math.random() * 1.4;
+    const d = 1.8 + Math.random() * 1.2;
+    const h = 16 + Math.random() * 18;
+    const hue = 0.55 + Math.random() * 0.08;
+    const tower = new THREE.Mesh(
+      new THREE.BoxGeometry(w, h, d),
+      glassMat(new THREE.Color().setHSL(hue, 0.12, 0.62 + Math.random() * 0.12), 0.55, 0.3));
+    tower.position.set(-44 + i * 3.4 + (Math.random() - 0.5) * 1.5,
+                       h / 2,
+                       3 + Math.random() * 3);
+    skyline.add(tower);
+    // Кантик/карниз сверху
+    const cap = new THREE.Mesh(
+      new THREE.BoxGeometry(w + 0.2, 0.4, d + 0.2), concreteMat);
+    cap.position.set(tower.position.x, h + 0.2, tower.position.z);
+    skyline.add(cap);
+  }
+  // Правый кластер
+  for (let i = 0; i < 8; i++) {
+    const w = 2.2 + Math.random() * 1.5;
+    const d = 1.8 + Math.random() * 1.2;
+    const h = 14 + Math.random() * 16;
+    const hue = 0.08 + Math.random() * 0.06;
+    const tower = new THREE.Mesh(
+      new THREE.BoxGeometry(w, h, d),
+      glassMat(new THREE.Color().setHSL(hue, 0.18, 0.68 + Math.random() * 0.12), 0.4, 0.4));
+    tower.position.set(8 + i * 3.6 + (Math.random() - 0.5) * 1.5,
+                       h / 2,
+                       3 + Math.random() * 3);
+    skyline.add(tower);
+    const cap = new THREE.Mesh(
+      new THREE.BoxGeometry(w + 0.2, 0.4, d + 0.2), concreteMat);
+    cap.position.set(tower.position.x, h + 0.2, tower.position.z);
+    skyline.add(cap);
+  }
+
+  // Мечеть — справа, отдельно
+  const mosque = new THREE.Group();
+  const stoneMat = new THREE.MeshStandardMaterial({ color: 0xeae0ce, roughness: 0.95 });
+  const domeMat  = new THREE.MeshStandardMaterial({ color: 0x4a86b8, roughness: 0.5, metalness: 0.25 });
+  const tipMat   = new THREE.MeshStandardMaterial({ color: 0xc6a448, roughness: 0.3, metalness: 0.7 });
+  // Основание
+  const base = new THREE.Mesh(new THREE.BoxGeometry(8, 5, 8), stoneMat);
+  base.position.y = 2.5; mosque.add(base);
+  // Главный купол
+  const dome = new THREE.Mesh(
+    new THREE.SphereGeometry(3.2, 24, 16, 0, Math.PI * 2, 0, Math.PI / 2), domeMat);
+  dome.position.y = 5; mosque.add(dome);
+  // Барабан под куполом
+  const drum = new THREE.Mesh(new THREE.CylinderGeometry(3.2, 3.2, 0.6, 16), stoneMat);
+  drum.position.y = 5.3; mosque.add(drum);
+  // Пик-полумесяц
+  const finial = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.12, 1.4, 8), tipMat);
+  finial.position.y = 8.8; mosque.add(finial);
+  // Малые купола по углам
+  for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+    const sd = new THREE.Mesh(
+      new THREE.SphereGeometry(1.0, 16, 12, 0, Math.PI * 2, 0, Math.PI / 2), domeMat);
+    sd.position.set(sx * 3.0, 5.2, sz * 3.0); mosque.add(sd);
+  }
+  // Минареты — два тонких высоких столба слева и справа
+  for (const sx of [-1, 1]) {
+    const shaft = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.34, 0.42, 12, 12), stoneMat);
+    shaft.position.set(sx * 4.6, 6, -3.6);
+    mosque.add(shaft);
+    // Балкон-кольцо на минарете
+    const balcony = new THREE.Mesh(
+      new THREE.TorusGeometry(0.6, 0.08, 6, 18), stoneMat);
+    balcony.position.set(sx * 4.6, 10.5, -3.6);
+    balcony.rotation.x = Math.PI / 2;
+    mosque.add(balcony);
+    // Конический шпиль
+    const spire = new THREE.Mesh(
+      new THREE.ConeGeometry(0.45, 2.0, 12), domeMat);
+    spire.position.set(sx * 4.6, 13.0, -3.6); mosque.add(spire);
+    // Маленький пик
+    const tip = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.04, 0.08, 0.8, 6), tipMat);
+    tip.position.set(sx * 4.6, 14.4, -3.6); mosque.add(tip);
+  }
+  mosque.position.set(30, 0, -8);
+  mosque.scale.setScalar(0.95);
+  skyline.add(mosque);
+
+  // Босфорский мост — два пилона с натянутыми вантами вдалеке
+  const bridge = new THREE.Group();
+  const bridgeMat = new THREE.MeshStandardMaterial({ color: 0xd4a45a, roughness: 0.7 });
+  const cableMat = new THREE.MeshStandardMaterial({ color: 0x6e5238, roughness: 0.85 });
+  for (const sx of [-1, 1]) {
+    const pylon = new THREE.Mesh(
+      new THREE.BoxGeometry(0.8, 14, 0.8), bridgeMat);
+    pylon.position.set(sx * 6, 7, 0); bridge.add(pylon);
+    // Vантовые тросы — наклонные тонкие цилиндры
+    for (let i = 0; i < 4; i++) {
+      const cable = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.04, 0.04, 10 + i * 1.5, 5), cableMat);
+      cable.position.set(sx * 6 - sx * (1 + i * 0.6), 6 + i * 0.4, 0);
+      cable.rotation.z = -sx * 0.6;
+      bridge.add(cable);
+    }
+  }
+  // Полотно моста
+  const deck = new THREE.Mesh(
+    new THREE.BoxGeometry(14, 0.3, 1.2), bridgeMat);
+  deck.position.set(0, 5, 0); bridge.add(deck);
+  bridge.position.set(-20, 0, -10);
+  bridge.scale.setScalar(0.9);
+  skyline.add(bridge);
+
+  // Далёкие холмы за городом
+  for (let i = 0; i < 5; i++) {
+    const h = 7 + Math.random() * 4;
+    const r = 8 + Math.random() * 4;
+    const hill = new THREE.Mesh(
+      new THREE.ConeGeometry(r, h, 12),
+      new THREE.MeshStandardMaterial({ color: 0x8aa888, roughness: 1.0 }));
+    hill.position.set(-30 + i * 14 + (Math.random() - 0.5) * 3, h / 2, -14);
+    skyline.add(hill);
+  }
+
+  return skyline;
+}
+
+// =============================================================
 // Шаблоны (player + collect + 3 препятствия + side-окружение)
 // =============================================================
 function buildTemplatesForCharacter(char) {
@@ -1018,6 +1273,16 @@ function buildTemplatesForCharacter(char) {
     templates.obstacleMid = buildHighCloud();
     templates.obstacleWide = buildStormCloud();
     templates.side = [buildHogwartsCandle, buildFloatingIsland, buildHogwartsTurret];
+  } else if (char.theme === 'istanbul') {
+    // Стамбул — двое мальчиков в красном Mercedes-кабриолете на шоссе
+    // вдоль Босфора. Режим только-смена-полосы: low/mid не спавнятся,
+    // wide — фабрика случайных моделей машин.
+    templates.player = buildMercedesWithBoys();
+    templates.collect = buildMoneyStack();
+    templates.obstacleLow = null;          // не используется в режиме lanes-only
+    templates.obstacleMid = null;
+    templates.obstacleWide = buildIstanbulCar;   // фабрика — рандомная машина каждый спавн
+    templates.side = [buildIstanbulApartment, buildPlaneTree, buildPromenadeLamp];
   } else {
     // Конфетный мир — общие препятствия и окружение
     templates.player = char.vehicle === 'cone' ? buildAnisaOnCone() : buildAklimaOnTable();
@@ -1787,6 +2052,284 @@ function buildOsmanOnBroom() {
 }
 
 // =============================================================
+// Игрок: Абдулла и Арслан — двое в красном Mercedes-кабриолете SL.
+// Без hover (наземный транспорт), без жалюзи: открытый кокпит, два
+// сиденья, лобовое стекло, фары, четыре колеса, звезда на капоте.
+// Габариты компактные, чтобы влезать в полосу (ширина ~1.7).
+// =============================================================
+function buildMercedesWithBoys() {
+  const root = new THREE.Group();
+
+  // ---- Кузов ----
+  const redMat = new THREE.MeshStandardMaterial({
+    color: 0xc02528, roughness: 0.32, metalness: 0.6 });
+  const redDark = new THREE.MeshStandardMaterial({
+    color: 0x7a181b, roughness: 0.45, metalness: 0.5 });
+  const chromeMat = new THREE.MeshStandardMaterial({
+    color: 0xe8eaee, roughness: 0.2, metalness: 0.95 });
+  const glassMat = new THREE.MeshStandardMaterial({
+    color: 0x2a3a4a, roughness: 0.15, metalness: 0.6,
+    transparent: true, opacity: 0.55 });
+  const blackMat = new THREE.MeshStandardMaterial({
+    color: 0x101010, roughness: 0.6 });
+  const tireMat = new THREE.MeshStandardMaterial({ color: 0x161616, roughness: 0.9 });
+  const rimMat = new THREE.MeshStandardMaterial({
+    color: 0xc8cad0, roughness: 0.35, metalness: 0.85 });
+  const lightMat = new THREE.MeshStandardMaterial({
+    color: 0xfff4d8, emissive: 0xffe2a0, emissiveIntensity: 0.6 });
+  const tailMat = new THREE.MeshStandardMaterial({
+    color: 0xff3030, emissive: 0xa01010, emissiveIntensity: 0.6 });
+
+  // Нижняя основа кузова (плоское «днище»)
+  const lower = new THREE.Mesh(
+    new THREE.BoxGeometry(1.65, 0.42, 3.2), redMat);
+  lower.position.y = 0.35; root.add(lower);
+
+  // Верхняя «талия» — чуть уже, имитация литой формы
+  const upper = new THREE.Mesh(
+    new THREE.BoxGeometry(1.55, 0.32, 3.0), redMat);
+  upper.position.y = 0.7; root.add(upper);
+
+  // Капот — слегка наклонная плоскость спереди
+  const hood = new THREE.Mesh(
+    new THREE.BoxGeometry(1.55, 0.06, 1.0), redMat);
+  hood.position.set(0, 0.86, -1.05); root.add(hood);
+
+  // Боковины (фартуки)
+  for (const sx of [-1, 1]) {
+    const side = new THREE.Mesh(
+      new THREE.BoxGeometry(0.08, 0.36, 2.8), redDark);
+    side.position.set(sx * 0.83, 0.6, 0);
+    root.add(side);
+  }
+
+  // Лобовое стекло — наклонное прямоугольное
+  const windshield = new THREE.Mesh(
+    new THREE.BoxGeometry(1.45, 0.7, 0.05), glassMat);
+  windshield.position.set(0, 1.1, -0.55);
+  windshield.rotation.x = -0.35;
+  root.add(windshield);
+  // Рамка лобового стекла
+  const wsFrame = new THREE.Mesh(
+    new THREE.BoxGeometry(1.5, 0.78, 0.07), blackMat);
+  wsFrame.position.set(0, 1.08, -0.57);
+  wsFrame.rotation.x = -0.35;
+  root.add(wsFrame);
+  // Сделать стекло «спереди» рамки видимым
+  windshield.position.z -= 0.005;
+
+  // Сиденья — два сиденья за стеклом
+  for (const sx of [-1, 1]) {
+    const seatBase = new THREE.Mesh(
+      new THREE.BoxGeometry(0.46, 0.1, 0.6), blackMat);
+    seatBase.position.set(sx * 0.38, 0.92, 0.1); root.add(seatBase);
+    const seatBack = new THREE.Mesh(
+      new THREE.BoxGeometry(0.46, 0.55, 0.12), blackMat);
+    seatBack.position.set(sx * 0.38, 1.18, 0.42);
+    seatBack.rotation.x = -0.18;
+    root.add(seatBack);
+    // Подголовник
+    const head = new THREE.Mesh(
+      new THREE.BoxGeometry(0.32, 0.22, 0.12), blackMat);
+    head.position.set(sx * 0.38, 1.46, 0.5); root.add(head);
+  }
+
+  // Решётка радиатора — чёрная вертикальная панель спереди
+  const grille = new THREE.Mesh(
+    new THREE.BoxGeometry(0.95, 0.32, 0.05), blackMat);
+  grille.position.set(0, 0.62, -1.605); root.add(grille);
+  // Хром вокруг решётки
+  const grilleRim = new THREE.Mesh(
+    new THREE.BoxGeometry(1.0, 0.38, 0.02), chromeMat);
+  grilleRim.position.set(0, 0.62, -1.61); root.add(grilleRim);
+  // Звезда Mercedes на капоте — три луча
+  const star = new THREE.Group();
+  for (let i = 0; i < 3; i++) {
+    const ray = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.018, 0.008, 0.16, 8), chromeMat);
+    ray.rotation.z = (i / 3) * Math.PI * 2;
+    star.add(ray);
+  }
+  const starRing = new THREE.Mesh(
+    new THREE.TorusGeometry(0.085, 0.012, 6, 18), chromeMat);
+  star.add(starRing);
+  star.position.set(0, 0.92, -1.45);
+  star.rotation.x = -0.2;
+  root.add(star);
+
+  // Фары — два овала
+  for (const sx of [-1, 1]) {
+    const lamp = new THREE.Mesh(
+      new THREE.SphereGeometry(0.13, 12, 10), lightMat);
+    lamp.scale.set(1.0, 0.6, 0.5);
+    lamp.position.set(sx * 0.5, 0.7, -1.62); root.add(lamp);
+  }
+  // Задние фонари
+  for (const sx of [-1, 1]) {
+    const tail = new THREE.Mesh(
+      new THREE.BoxGeometry(0.32, 0.1, 0.04), tailMat);
+    tail.position.set(sx * 0.45, 0.7, 1.6); root.add(tail);
+  }
+
+  // Боковые зеркала
+  for (const sx of [-1, 1]) {
+    const stem = new THREE.Mesh(
+      new THREE.BoxGeometry(0.05, 0.05, 0.12), redDark);
+    stem.position.set(sx * 0.84, 1.03, -0.4); root.add(stem);
+    const mirror = new THREE.Mesh(
+      new THREE.BoxGeometry(0.16, 0.1, 0.06), blackMat);
+    mirror.position.set(sx * 0.95, 1.03, -0.4); root.add(mirror);
+  }
+
+  // Колёса (4 шт)
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+    const wheel = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.32, 0.32, 0.22, 14), tireMat);
+    wheel.rotation.z = Math.PI / 2;
+    wheel.position.set(sx * 0.86, 0.32, sz * 1.1); root.add(wheel);
+    // Диск
+    const rim = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.2, 0.2, 0.23, 14), rimMat);
+    rim.rotation.z = Math.PI / 2;
+    rim.position.set(sx * 0.86, 0.32, sz * 1.1); root.add(rim);
+    // Спицы (3 линии)
+    for (let s = 0; s < 3; s++) {
+      const spoke = new THREE.Mesh(
+        new THREE.BoxGeometry(0.04, 0.36, 0.01), chromeMat);
+      spoke.position.set(sx * 0.87, 0.32, sz * 1.1);
+      spoke.rotation.z = (s / 3) * Math.PI;
+      root.add(spoke);
+    }
+  }
+
+  // Руль перед сиденьем водителя (левое сиденье в RHD/LHD неважно — берём левое)
+  const wheelRim = new THREE.Mesh(
+    new THREE.TorusGeometry(0.14, 0.025, 6, 18), blackMat);
+  wheelRim.position.set(-0.38, 1.04, -0.32);
+  wheelRim.rotation.x = 0.6;
+  root.add(wheelRim);
+  // Спицы руля
+  for (let i = 0; i < 3; i++) {
+    const sp = new THREE.Mesh(
+      new THREE.BoxGeometry(0.018, 0.12, 0.018), blackMat);
+    sp.position.copy(wheelRim.position);
+    sp.rotation.x = 0.6;
+    sp.rotation.z = (i / 3) * Math.PI;
+    root.add(sp);
+  }
+
+  // ---- Два мальчика на сиденьях ----
+  const skinMat   = new THREE.MeshStandardMaterial({ color: 0xf2c79b, roughness: 0.85 });
+  const blazerMat = new THREE.MeshStandardMaterial({ color: 0x1a1a22, roughness: 0.7 });
+  const shirtMat  = new THREE.MeshStandardMaterial({ color: 0x2a2a32, roughness: 0.75 });
+  const hairMat   = new THREE.MeshStandardMaterial({ color: 0x6e4626, roughness: 0.95 });
+  const shadeMat  = new THREE.MeshStandardMaterial({
+    color: 0x0a0a0a, roughness: 0.2, metalness: 0.5 });
+  const lipMat    = new THREE.MeshStandardMaterial({ color: 0xc24a4a });
+  const chainMat  = new THREE.MeshStandardMaterial({
+    color: 0xe8c850, roughness: 0.35, metalness: 0.85 });
+
+  function makeBoy(parent, x, isDriver) {
+    const boy = new THREE.Group();
+    // Торс — пиджак
+    const torso = new THREE.Mesh(new THREE.SphereGeometry(0.22, 14, 12), blazerMat);
+    torso.scale.set(1.0, 1.1, 0.85);
+    torso.position.set(0, 1.18, 0.18); boy.add(torso);
+    // Лацканы
+    for (const sx of [-1, 1]) {
+      const lap = new THREE.Mesh(new THREE.SphereGeometry(0.07, 10, 8),
+        new THREE.MeshStandardMaterial({ color: 0x0a0a12, roughness: 0.7 }));
+      lap.scale.set(0.4, 1.1, 0.25);
+      lap.position.set(sx * 0.08, 1.22, 0.0);
+      lap.rotation.z = sx * 0.18;
+      boy.add(lap);
+    }
+    // Тёмная рубашка / поло
+    const shirtV = new THREE.Mesh(new THREE.SphereGeometry(0.085, 10, 8), shirtMat);
+    shirtV.scale.set(1, 1.15, 0.3);
+    shirtV.position.set(0, 1.32, -0.05);
+    boy.add(shirtV);
+    // Золотая цепь у пассажира (как на фото)
+    if (!isDriver) {
+      const chain = new THREE.Mesh(
+        new THREE.TorusGeometry(0.06, 0.012, 6, 18), chainMat);
+      chain.position.set(0, 1.36, -0.04);
+      chain.rotation.x = Math.PI / 2;
+      chain.scale.set(1.2, 1, 1);
+      boy.add(chain);
+    }
+    // Шея
+    const neck = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.055, 0.06, 0.08, 10), skinMat);
+    neck.position.set(0, 1.45, -0.02); boy.add(neck);
+    // Голова
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.2, 18, 14), skinMat);
+    head.scale.set(1.0, 1.05, 1.0);
+    head.position.set(0, 1.63, -0.02); boy.add(head);
+    // Волосы — короткие, тёмно-русые
+    const hairTop = new THREE.Mesh(new THREE.SphereGeometry(0.205, 16, 12), hairMat);
+    hairTop.scale.set(1.05, 0.55, 1.05);
+    hairTop.position.set(0, 1.73, -0.03); boy.add(hairTop);
+    const bangs = new THREE.Mesh(new THREE.SphereGeometry(0.125, 12, 10), hairMat);
+    bangs.scale.set(1.45, 0.35, 0.55);
+    bangs.position.set(0, 1.69, -0.17); boy.add(bangs);
+    // Солнцезащитные очки — тёмная горизонтальная «маска»
+    const shades = new THREE.Mesh(
+      new THREE.BoxGeometry(0.24, 0.07, 0.05), shadeMat);
+    shades.position.set(0, 1.63, -0.2); boy.add(shades);
+    // Дужки очков
+    for (const sx of [-1, 1]) {
+      const arm = new THREE.Mesh(
+        new THREE.BoxGeometry(0.04, 0.012, 0.07), shadeMat);
+      arm.position.set(sx * 0.13, 1.63, -0.16); boy.add(arm);
+    }
+    // Лёгкая улыбка
+    const smile = new THREE.Mesh(
+      new THREE.TorusGeometry(0.045, 0.009, 6, 12, Math.PI), lipMat);
+    smile.rotation.x = Math.PI;
+    smile.position.set(0, 1.54, -0.21); boy.add(smile);
+    // Руки на руле (только водитель) или вдоль кузова (пассажир)
+    if (isDriver) {
+      for (const sx of [-1, 1]) {
+        const upperArm = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.055, 0.05, 0.26, 10), blazerMat);
+        upperArm.position.set(sx * 0.18, 1.18, -0.04);
+        upperArm.rotation.z = sx * 0.2;
+        upperArm.rotation.x = -0.55;
+        boy.add(upperArm);
+        const hand = new THREE.Mesh(new THREE.SphereGeometry(0.055, 10, 8), skinMat);
+        hand.position.set(sx * 0.12, 1.0, -0.28);
+        boy.add(hand);
+      }
+    } else {
+      // Пассажир — одна рука положена на дверь, другая опущена
+      const armOnDoor = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.055, 0.05, 0.32, 10), blazerMat);
+      armOnDoor.position.set(0.22, 1.05, 0.12);
+      armOnDoor.rotation.z = 0.5;
+      boy.add(armOnDoor);
+      const lapHand = new THREE.Mesh(new THREE.SphereGeometry(0.055, 10, 8), skinMat);
+      lapHand.position.set(0.35, 0.95, 0.12);
+      boy.add(lapHand);
+      const otherArm = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.055, 0.05, 0.28, 10), blazerMat);
+      otherArm.position.set(-0.12, 1.08, 0.22);
+      otherArm.rotation.z = -0.2;
+      boy.add(otherArm);
+    }
+    boy.position.x = x;
+    parent.add(boy);
+  }
+  // Водитель — слева (отрицательный X), пассажир — справа
+  makeBoy(root, -0.38, true);
+  makeBoy(root, 0.38, false);
+
+  // Без hover — машина едет по земле
+  root.userData.hover = false;
+  return root;
+}
+
+// =============================================================
 // Собираемые: апельсин (Мухаммад), долька арбуза (Аклима), эскимо (Аниса)
 // =============================================================
 function buildOrange() {
@@ -1960,6 +2503,53 @@ function buildGoldBar() {
   bar.add(stamp);
 
   return bar;
+}
+
+// Собираемое Абдуллы и Арслана — пачка денег с бумажной обёрткой
+function buildMoneyStack() {
+  const stack = new THREE.Group();
+  // Зеленоватая «купюрная» текстура — простой плоский цвет с лёгким emissive
+  const billMat = new THREE.MeshStandardMaterial({
+    color: 0x6ea868, roughness: 0.75,
+    emissive: 0x1a4a18, emissiveIntensity: 0.2 });
+  const billEdge = new THREE.MeshStandardMaterial({
+    color: 0xe2e8d0, roughness: 0.85 });
+  const bandMat = new THREE.MeshStandardMaterial({
+    color: 0xe8c264, roughness: 0.5, metalness: 0.2,
+    emissive: 0x6a4810, emissiveIntensity: 0.25 });
+  const stampMat = new THREE.MeshStandardMaterial({ color: 0x2a4218, roughness: 0.6 });
+
+  // Корпус пачки — плоский параллелепипед
+  const body = new THREE.Mesh(
+    new THREE.BoxGeometry(0.5, 0.18, 0.26), billMat);
+  body.position.y = 0; stack.add(body);
+  // Светлые торцы — намёк на «бок пачки» из множества купюр
+  for (const sx of [-1, 1]) {
+    const edge = new THREE.Mesh(
+      new THREE.BoxGeometry(0.012, 0.165, 0.245), billEdge);
+    edge.position.set(sx * 0.255, 0, 0); stack.add(edge);
+  }
+  for (const sz of [-1, 1]) {
+    const edge = new THREE.Mesh(
+      new THREE.BoxGeometry(0.485, 0.165, 0.012), billEdge);
+    edge.position.set(0, 0, sz * 0.131); stack.add(edge);
+  }
+  // Бумажная лента-обёртка по центру
+  const band = new THREE.Mesh(
+    new THREE.BoxGeometry(0.52, 0.085, 0.28), bandMat);
+  band.position.y = 0; stack.add(band);
+  // Печать на ленте — маленький тёмный квадрат
+  const stamp = new THREE.Mesh(
+    new THREE.BoxGeometry(0.08, 0.087, 0.02), stampMat);
+  stamp.position.set(0, 0, 0.14); stack.add(stamp);
+  // Тонкие линии-полоски сверху для имитации печати на купюре
+  for (const dy of [0.092, -0.092]) {
+    const top = new THREE.Mesh(
+      new THREE.BoxGeometry(0.48, 0.005, 0.25),
+      new THREE.MeshStandardMaterial({ color: 0x4a8045, roughness: 0.7 }));
+    top.position.y = dy; stack.add(top);
+  }
+  return stack;
 }
 
 // =============================================================
@@ -2297,6 +2887,171 @@ function buildStormCloud() {
 }
 
 // =============================================================
+// Препятствия Стамбула — другие машины разных моделей.
+// buildIstanbulCar — фабрика: возвращает свежую модель каждый спавн.
+// Hitbox wide стандартный (1.7 × 1.5 × 3.0), так что любая модель
+// должна вписываться в эти габариты по «средней» массе.
+// =============================================================
+function buildIstanbulCar() {
+  const variants = [
+    'sedan', 'sedan', 'suv', 'hatchback', 'sport', 'taxi', 'pickup',
+  ];
+  const v = variants[Math.floor(Math.random() * variants.length)];
+  const bodyColors = [
+    0xffffff, 0x101012, 0xb0b0b6, 0x2a3a5e, 0x6e2e2e,
+    0xc4862a, 0x2c6fb5, 0x2a6a3a, 0xcfcfd2,
+  ];
+  let color = bodyColors[Math.floor(Math.random() * bodyColors.length)];
+  if (v === 'taxi') color = 0xffd040;
+
+  const bodyMat = new THREE.MeshStandardMaterial({
+    color, roughness: 0.5, metalness: 0.45 });
+  const glassMat = new THREE.MeshStandardMaterial({
+    color: 0x2a3a4a, roughness: 0.15, metalness: 0.6,
+    transparent: true, opacity: 0.55 });
+  const blackMat = new THREE.MeshStandardMaterial({ color: 0x0a0a0a, roughness: 0.85 });
+  const chromeMat = new THREE.MeshStandardMaterial({
+    color: 0xe6e8ea, roughness: 0.25, metalness: 0.9 });
+  const lampMat = new THREE.MeshStandardMaterial({
+    color: 0xfff4d8, emissive: 0xffe2a0, emissiveIntensity: 0.5 });
+  const tailMat = new THREE.MeshStandardMaterial({
+    color: 0xff3030, emissive: 0xa01010, emissiveIntensity: 0.5 });
+
+  const car = new THREE.Group();
+
+  // Параметры варианта
+  let dims;
+  if (v === 'suv') {
+    dims = { len: 2.8, w: 1.6, lowerH: 0.55, upperH: 0.85, upperLen: 1.8 };
+  } else if (v === 'hatchback') {
+    dims = { len: 2.4, w: 1.5, lowerH: 0.45, upperH: 0.55, upperLen: 1.5 };
+  } else if (v === 'sport') {
+    dims = { len: 2.9, w: 1.55, lowerH: 0.42, upperH: 0.42, upperLen: 1.1 };
+  } else if (v === 'pickup') {
+    dims = { len: 3.0, w: 1.6, lowerH: 0.5, upperH: 0.55, upperLen: 0.9 };
+  } else {
+    // sedan и taxi
+    dims = { len: 2.85, w: 1.55, lowerH: 0.48, upperH: 0.55, upperLen: 1.4 };
+  }
+
+  // Нижний корпус
+  const lower = new THREE.Mesh(
+    new THREE.BoxGeometry(dims.w, dims.lowerH, dims.len), bodyMat);
+  lower.position.y = 0.36; car.add(lower);
+
+  // Верхняя кабина (со смещением вперёд для sport, по центру для остальных)
+  const upperZ = v === 'sport' ? -0.05 : (v === 'pickup' ? -0.5 : 0.1);
+  const upper = new THREE.Mesh(
+    new THREE.BoxGeometry(dims.w - 0.1, dims.upperH, dims.upperLen), bodyMat);
+  upper.position.set(0, 0.36 + dims.lowerH / 2 + dims.upperH / 2, upperZ);
+  car.add(upper);
+
+  // Стёкла — пара плоскостей по бокам кабины
+  for (const sx of [-1, 1]) {
+    const win = new THREE.Mesh(
+      new THREE.BoxGeometry(0.04, dims.upperH * 0.7, dims.upperLen * 0.85), glassMat);
+    win.position.set(sx * (dims.w / 2 - 0.05), upper.position.y, upperZ);
+    car.add(win);
+  }
+  // Лобовое и заднее стекло
+  for (const sz of [-1, 1]) {
+    const ws = new THREE.Mesh(
+      new THREE.BoxGeometry(dims.w - 0.16, dims.upperH * 0.65, 0.05), glassMat);
+    ws.position.set(0, upper.position.y, upperZ + sz * (dims.upperLen / 2 - 0.025));
+    car.add(ws);
+  }
+
+  // Кузов pickup — открытый багажник сзади
+  if (v === 'pickup') {
+    const bedFloor = new THREE.Mesh(
+      new THREE.BoxGeometry(dims.w - 0.08, 0.04, 1.0),
+      new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.85 }));
+    bedFloor.position.set(0, 0.36 + dims.lowerH / 2 + 0.02, 0.65);
+    car.add(bedFloor);
+    for (const sx of [-1, 1]) {
+      const wall = new THREE.Mesh(
+        new THREE.BoxGeometry(0.06, 0.25, 1.0), bodyMat);
+      wall.position.set(sx * (dims.w / 2 - 0.03), 0.36 + dims.lowerH / 2 + 0.12, 0.65);
+      car.add(wall);
+    }
+  }
+
+  // Фары спереди (-Z)
+  for (const sx of [-1, 1]) {
+    const lamp = new THREE.Mesh(
+      new THREE.SphereGeometry(0.11, 12, 10), lampMat);
+    lamp.scale.set(1.0, 0.55, 0.5);
+    lamp.position.set(sx * (dims.w / 2 - 0.18), 0.55, -dims.len / 2 - 0.005);
+    car.add(lamp);
+  }
+  // Задние фонари (+Z)
+  for (const sx of [-1, 1]) {
+    const tail = new THREE.Mesh(
+      new THREE.BoxGeometry(0.3, 0.1, 0.03), tailMat);
+    tail.position.set(sx * (dims.w / 2 - 0.22), 0.6, dims.len / 2 + 0.005);
+    car.add(tail);
+  }
+
+  // Решётка спереди
+  const grille = new THREE.Mesh(
+    new THREE.BoxGeometry(dims.w * 0.6, 0.18, 0.04), blackMat);
+  grille.position.set(0, 0.42, -dims.len / 2 - 0.005); car.add(grille);
+
+  // Бампер
+  const bumper = new THREE.Mesh(
+    new THREE.BoxGeometry(dims.w + 0.05, 0.12, 0.08), chromeMat);
+  bumper.position.set(0, 0.22, -dims.len / 2 + 0.03); car.add(bumper);
+  const bumperRear = bumper.clone();
+  bumperRear.position.z = dims.len / 2 - 0.03;
+  car.add(bumperRear);
+
+  // Колёса
+  const tireMat = new THREE.MeshStandardMaterial({ color: 0x141414, roughness: 0.9 });
+  const rimMat  = new THREE.MeshStandardMaterial({
+    color: 0xb0b6c0, roughness: 0.45, metalness: 0.8 });
+  const wheelR = v === 'suv' ? 0.34 : v === 'sport' ? 0.3 : 0.32;
+  const wheelOffsetZ = dims.len / 2 - 0.55;
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+    const tire = new THREE.Mesh(
+      new THREE.CylinderGeometry(wheelR, wheelR, 0.22, 14), tireMat);
+    tire.rotation.z = Math.PI / 2;
+    tire.position.set(sx * (dims.w / 2 - 0.02), wheelR, sz * wheelOffsetZ);
+    car.add(tire);
+    const rim = new THREE.Mesh(
+      new THREE.CylinderGeometry(wheelR * 0.6, wheelR * 0.6, 0.23, 14), rimMat);
+    rim.rotation.z = Math.PI / 2;
+    rim.position.copy(tire.position);
+    car.add(rim);
+  }
+
+  // Шашечки для такси — пара жёлто-чёрных квадратиков на дверях
+  if (v === 'taxi') {
+    for (const sx of [-1, 1]) {
+      for (let i = 0; i < 6; i++) {
+        const sq = new THREE.Mesh(
+          new THREE.BoxGeometry(0.12, 0.12, 0.02),
+          new THREE.MeshStandardMaterial({
+            color: i % 2 ? 0x101010 : 0xffd040, roughness: 0.55 }));
+        sq.position.set(sx * (dims.w / 2 - 0.005),
+                         0.5 + (i % 2) * 0.12,
+                         -0.4 + i * 0.14);
+        sq.rotation.y = Math.PI / 2;
+        car.add(sq);
+      }
+    }
+    // «TAXI» табличка на крыше
+    const sign = new THREE.Mesh(
+      new THREE.BoxGeometry(0.5, 0.2, 0.25),
+      new THREE.MeshStandardMaterial({
+        color: 0xffd040, emissive: 0xff9020, emissiveIntensity: 0.4 }));
+    sign.position.set(0, upper.position.y + dims.upperH / 2 + 0.12, upperZ);
+    car.add(sign);
+  }
+
+  return car;
+}
+
+// =============================================================
 // Боковая среда: Дубай (пальма / вилла / кактус)
 // =============================================================
 function buildPalmTree() {
@@ -2546,6 +3301,98 @@ function buildHogwartsTurret() {
 }
 
 // =============================================================
+// Боковая среда: Стамбул (современный жилой дом / платан / фонарь)
+// =============================================================
+function buildIstanbulApartment() {
+  // Современная жилая башня — прямоугольная коробка с поэтажными окнами
+  const g = new THREE.Group();
+  const w = 2.4 + Math.random() * 1.6;
+  const d = 2.0 + Math.random() * 1.4;
+  const h = 8 + Math.random() * 8;
+  const wallC = [0xeae0c8, 0xd6cdb2, 0xc8c0a0, 0xe2d8c0][Math.floor(Math.random() * 4)];
+  const accent = [0x6e92a8, 0x8aa098, 0xa07a5a, 0x3a4858][Math.floor(Math.random() * 4)];
+
+  const walls = new THREE.Mesh(
+    new THREE.BoxGeometry(w, h, d),
+    new THREE.MeshStandardMaterial({ color: wallC, roughness: 0.85 }));
+  walls.position.y = h / 2; g.add(walls);
+  // Плоская крыша
+  const roof = new THREE.Mesh(
+    new THREE.BoxGeometry(w + 0.2, 0.18, d + 0.2),
+    new THREE.MeshStandardMaterial({ color: accent, roughness: 0.7 }));
+  roof.position.y = h + 0.09; g.add(roof);
+
+  // Балконы рядами
+  const floors = Math.floor(h / 1.6);
+  for (let f = 1; f <= floors; f++) {
+    const y = f * (h / (floors + 1));
+    const balcony = new THREE.Mesh(
+      new THREE.BoxGeometry(w * 0.85, 0.06, 0.18),
+      new THREE.MeshStandardMaterial({ color: accent, roughness: 0.7 }));
+    balcony.position.set(0, y, d / 2 + 0.09); g.add(balcony);
+    // Окно за балконом
+    const win = new THREE.Mesh(
+      new THREE.BoxGeometry(w * 0.6, 0.55, 0.05),
+      new THREE.MeshStandardMaterial({
+        color: 0xa8c8e0, metalness: 0.6, roughness: 0.25,
+        emissive: 0x1a3a55, emissiveIntensity: 0.15 }));
+    win.position.set(0, y + 0.2, d / 2 + 0.025); g.add(win);
+  }
+  return g;
+}
+
+function buildPlaneTree() {
+  // Платан / уличное дерево — широкая зелёная крона, серый ствол
+  const tree = new THREE.Group();
+  const trunkMat = new THREE.MeshStandardMaterial({ color: 0x7a6e58, roughness: 0.95 });
+  const leafMat = new THREE.MeshStandardMaterial({ color: 0x4e7a3c, roughness: 0.9 });
+  const trunk = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.18, 0.22, 2.2, 8), trunkMat);
+  trunk.position.y = 1.1; tree.add(trunk);
+  for (let i = 0; i < 5; i++) {
+    const r = 0.7 + Math.random() * 0.4;
+    const blob = new THREE.Mesh(new THREE.SphereGeometry(r, 12, 10), leafMat);
+    blob.position.set(
+      (Math.random() - 0.5) * 1.0,
+      2.4 + Math.random() * 0.6,
+      (Math.random() - 0.5) * 1.0);
+    tree.add(blob);
+  }
+  return tree;
+}
+
+function buildPromenadeLamp() {
+  // Декоративный набережный фонарь — высокий тонкий столб с двумя плафонами
+  const g = new THREE.Group();
+  const poleMat = new THREE.MeshStandardMaterial({ color: 0x2a2a32, roughness: 0.85 });
+  const lampMat = new THREE.MeshStandardMaterial({
+    color: 0xfff4d0, emissive: 0xffd060, emissiveIntensity: 0.6 });
+  // База
+  const base = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.22, 0.28, 0.32, 12), poleMat);
+  base.position.y = 0.16; g.add(base);
+  // Столб
+  const pole = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.07, 0.09, 3.6, 8), poleMat);
+  pole.position.y = 2.0; g.add(pole);
+  // Поперечина
+  const arm = new THREE.Mesh(
+    new THREE.BoxGeometry(1.4, 0.05, 0.05), poleMat);
+  arm.position.y = 3.6; g.add(arm);
+  // Два плафона
+  for (const sx of [-1, 1]) {
+    const lamp = new THREE.Mesh(
+      new THREE.SphereGeometry(0.16, 12, 10), lampMat);
+    lamp.position.set(sx * 0.6, 3.45, 0); g.add(lamp);
+    // Хомутик
+    const clip = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.04, 0.04, 0.12, 6), poleMat);
+    clip.position.set(sx * 0.6, 3.6, 0); g.add(clip);
+  }
+  return g;
+}
+
+// =============================================================
 // Игрок: общая обёртка (кладёт модель в holder + создаёт тень)
 // =============================================================
 function buildPlayer(char) {
@@ -2561,7 +3408,9 @@ function buildPlayer(char) {
     ? 0x2a1a0a
     : char.theme === 'hogwarts'
       ? 0x0a1230
-      : 0xc06080;
+      : char.theme === 'istanbul'
+        ? 0x2a3a4a
+        : 0xc06080;
   const shadow = new THREE.Mesh(
     new THREE.CircleGeometry(0.95, 24),
     new THREE.MeshBasicMaterial({ color: shadowColor, transparent: true, opacity: 0.32 }));
@@ -2582,6 +3431,7 @@ function spawnPickupParticles(x, y, z) {
   const theme = currentCharacter && currentCharacter.theme;
   const baseColor = theme === 'dubai' ? 0xffa840
                   : theme === 'hogwarts' ? 0xffd860
+                  : theme === 'istanbul' ? 0x7ad080
                   : 0xff8aaa;
   const mat = new THREE.MeshBasicMaterial({ color: baseColor, transparent: true, opacity: 1 });
   const geo = new THREE.SphereGeometry(0.08, 6, 5);
@@ -2807,10 +3657,14 @@ function moveLane(dir) {
   playerTargetX = LANES[playerLane];
 }
 function doJump() {
+  // В режиме «только смена полосы» (Абдулла и Арслан в кабриолете) прыжков нет
+  if (currentCharacter && currentCharacter.mode === 'lanes-only') return;
   if (isJumping || isSliding) return;
   isJumping = true; jumpTime = 0;
 }
 function doSlide() {
+  // В режиме «только смена полосы» подкатов тоже нет
+  if (currentCharacter && currentCharacter.mode === 'lanes-only') return;
   if (isSliding || isJumping) return;
   isSliding = true; slideTime = 0;
 }
@@ -2870,6 +3724,29 @@ function gameOver() {
 // Спавн рядов препятствий и собираемых
 // =============================================================
 function spawnRow(z) {
+  // Режим «только смена полосы» (Абдулла и Арслан): только wide-машины,
+  // 1-2 полосы заблокированы, одна гарантированно свободна — игрок маневрирует.
+  if (currentCharacter && currentCharacter.mode === 'lanes-only') {
+    const lanes = [0, 1, 2];
+    for (let i = lanes.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [lanes[i], lanes[j]] = [lanes[j], lanes[i]];
+    }
+    const numCars = Math.random() < 0.45 ? 2 : 1;
+    const blocked = new Set(lanes.slice(0, numCars));
+    for (const lane of blocked) spawnObstacle('wide', lane, z);
+    for (let lane = 0; lane < 3; lane++) {
+      if (blocked.has(lane)) continue;
+      if (Math.random() < ORANGE_CHAIN_CHANCE) {
+        const n = 4 + Math.floor(Math.random() * 3);
+        for (let i = 0; i < n; i++) spawnOrange(lane, z + i * 1.4);
+      } else if (Math.random() < 0.6) {
+        spawnOrange(lane, z);
+      }
+    }
+    return;
+  }
+
   const blockedLanes = new Set();
   const wideLane = (Math.random() < 0.18) ? Math.floor(Math.random() * 3) : -1;
   if (wideLane >= 0) blockedLanes.add(wideLane);
@@ -2897,7 +3774,9 @@ function spawnRow(z) {
 
 function spawnObstacle(type, lane, z) {
   const tplKey = type === 'low' ? 'obstacleLow' : type === 'mid' ? 'obstacleMid' : 'obstacleWide';
-  const mesh = templates[tplKey].clone(true);
+  const tpl = templates[tplKey];
+  // Шаблон может быть фабрикой (для рандомных моделей машин в Стамбуле) или Object3D.
+  const mesh = typeof tpl === 'function' ? tpl() : tpl.clone(true);
   mesh.position.set(LANES[lane], 0, z);
   scene.add(mesh);
   // Хитбоксы как у дубайских аналогов — гарантирует одинаковую сложность для всех тем
