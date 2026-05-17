@@ -23,7 +23,7 @@ const MAX_SPEED = 32;
 const SPEED_GROWTH = 0.25;
 const SPAWN_AHEAD = 90;
 const DESPAWN_BEHIND = 18;
-const ROW_SPACING = 11;
+const ROW_SPACING = 20;
 const ORANGE_CHAIN_CHANCE = 0.25;
 
 // ---------- Аудио (фоновая музыка + звук Game Over) ----------
@@ -3732,7 +3732,7 @@ function spawnRow(z) {
       const j = Math.floor(Math.random() * (i + 1));
       [lanes[i], lanes[j]] = [lanes[j], lanes[i]];
     }
-    const numCars = Math.random() < 0.45 ? 2 : 1;
+    const numCars = Math.random() < 0.01 ? 2 : 1;
     const blocked = new Set(lanes.slice(0, numCars));
     for (const lane of blocked) spawnObstacle('wide', lane, z);
     for (let lane = 0; lane < 3; lane++) {
